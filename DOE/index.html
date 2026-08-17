@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DOE — Planejamento e otimização de experimentos</title>
+  <meta name="description" content="Ferramenta de planejamento de experimentos (CCD) e otimização por superfície de resposta. Grupo 7 — QUI-28 LAB, ITA.">
+  <link rel="stylesheet" href="app/css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧪</text></svg>">
+  <script src="app/js/vendor/xlsx.full.min.js"></script>
+</head>
+<body>
+  <header class="topo">
+    <div class="topo-int">
+      <div class="marca">
+        <span>DOE</span>
+        <small>Grupo 7 &middot; QUI-28 LAB &middot; ITA</small>
+      </div>
+      <div class="topo-acoes">
+        <button class="btn btn-fantasma btn-pequeno oculto" id="retomar">Retomar experimento</button>
+        <button class="btn btn-fantasma btn-pequeno" id="recomecar">Recomeçar</button>
+        <button class="btn btn-fantasma btn-pequeno" id="alternar-tema" aria-label="Alternar tema claro, escuro ou automático" title="Alternar tema">◐</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="app" aria-live="polite"></main>
+
+  <noscript>
+    <div style="max-width:1180px;margin:2rem auto;padding:1.25rem;border:1px solid #d03b3b;border-radius:10px">
+      Esta ferramenta funciona inteiramente no seu navegador e precisa de JavaScript ativado.
+    </div>
+  </noscript>
+
+  <footer class="rodape">
+    <p>
+      <strong>Planejamento composto central e otimização por superfície de resposta.</strong>
+      Todos os cálculos rodam no seu navegador — nenhum dado é enviado para servidor algum.
+    </p>
+    <p>
+      Desenvolvido pelo Grupo 7 da disciplina QUI-28 LAB do Instituto Tecnológico de Aeronáutica.
+      Método de referência: Barros Neto, Scarminio &amp; Bruns, <em>Como Fazer Experimentos</em>.
+    </p>
+  </footer>
+
+  <script type="module" src="app/js/main.js"></script>
+</body>
+</html>
