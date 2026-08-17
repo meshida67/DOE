@@ -10,3 +10,7 @@ teste.m
 latextab.txt
 anovatab.txt
 *.asv
+
+# dependências e artefatos locais
+node_modules/
+package-lock.json
