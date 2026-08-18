@@ -1,7 +1,7 @@
 # Projeto DOE
 O projeto tem como objetivo desenvolver um software munido de ferramentas que possibilitam o planejamento experimental e a análise de dados em ensaios que buscam otimização de produtos cujo rendimento depende de 2 ou mais fatores. 
 ## Estrutura das pastas
--**'matlab'**: Contém os scripts e funções desenvolvidos em MATLAB\n
+-**'matlab'**: Contém os scripts e funções desenvolvidos em MATLAB
 -**semana i**: Contém a documentação das atividades desenvolvidades por nossa equipe na i-ésima semana.
 ## Tecnologias Utilizadas
 - MATLAB
