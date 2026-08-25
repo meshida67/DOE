@@ -1,0 +1,193 @@
+\documentclass[12pt]{article}
+\usepackage{fix-cm}
+
+\usepackage[a4paper,
+            top=3cm, bottom=2cm,
+            left=3cm, right=2cm]{geometry}
+
+\usepackage[num, overcite]{abntex2cite}
+\citebrackets[]
+\makeatletter
+\renewcommand\@biblabel[1]{[#1] }
+\makeatother
+
+\usepackage{subcaption}
+\usepackage{booktabs}
+\usepackage{amsmath, amsfonts, amsthm, bm}
+\usepackage{newtxtext, newtxmath, mathtools}
+\usepackage[brazil]{babel}
+\usepackage[T1]{fontenc}
+\usepackage{indentfirst}
+\usepackage{microtype}
+\usepackage{fancyhdr}
+\usepackage{graphicx}
+\usepackage{ragged2e}
+\usepackage{multirow}
+\usepackage{setspace}
+\usepackage{subfig}
+\usepackage{icomma}
+\usepackage{array}
+\usepackage{float}
+\usepackage{tikz}
+
+\usepackage{silence}
+\WarningFilter{latex}{Command \showhyphens has changed}
+
+\onehalfspacing
+\setlength{\parindent}{1.25cm}
+\setlength{\parskip}{0.4\baselineskip}
+\justifying
+
+\usepackage{titlesec}
+
+\newcommand{\titlefix}{
+  \hyphenpenalty=10000
+  \exhyphenpenalty=10000
+  \emergencystretch=2em
+}
+
+\captionsetup{
+    justification=centering
+}
+
+\titleformat{\section}
+{\normalsize\bfseries\titlefix}
+{\thesection.}
+{0.5em}
+{}
+
+\titlespacing*{\section}
+{0.75cm}
+{1.5\baselineskip}
+{0.8\baselineskip}
+
+\titleformat{\subsection}
+{\normalsize\bfseries\titlefix}
+{\thesubsection.}
+{0.5em}
+{}
+
+\titlespacing*{\subsection}
+{1.5cm}
+{1.2\baselineskip}
+{0.6\baselineskip}
+
+\titleformat{\subsubsection}
+{\normalsize\bfseries\titlefix}
+{\thesubsubsection.}
+{0.5em}
+{}
+
+\titlespacing*{\subsubsection}
+{2.25cm}
+{1.0\baselineskip}
+{0.4\baselineskip}
+
+\titleformat{name=\section,numberless}
+{\normalsize\bfseries\centering\titlefix}
+{}
+{0em}
+{}
+
+\titlespacing*{name=\section,numberless}
+{0cm}
+{1.5\baselineskip}
+{0.8\baselineskip}
+
+\begin{document}
+\pagestyle{empty}
+
+\begin{center}
+
+	\includegraphics[width=0.3\textwidth]{ita_rgb.jpg}
+
+	\vfill
+
+	{\large\bfseries
+		Relatório parcial semana 1\\[2.0\baselineskip]
+
+	}
+
+	\vfill
+
+	{\normalsize\bfseries
+		Caio Schaden Ishida\\[0.5\baselineskip]
+		Cauã Henrique de Souza\\[0.5\baselineskip]
+		Felipe Osternes da Silva\\[0.5\baselineskip]
+		Henrique Sousa Fagundes\\[0.5\baselineskip]
+		João Victor Evers Cordeiro\\[0.5\baselineskip]
+		José Hernando Figueiredo da Silva Filho
+	}
+
+	\vfill
+
+	{\normalsize\bfseries
+		Grupo nº 07\\[0.6\baselineskip]
+		Turma 30.2
+	}
+
+	\vfill
+
+	{\normalsize
+		Professores\\
+		Deborah Dibbern Brunelli\\
+		Leonardo Tsuyoshi Ueno\\
+		Luís Gustavo Ferroni Pereira\\
+
+		\medskip
+		
+		Data de entrega: 11/08/2026
+	}
+
+	\vfill
+
+	{\normalsize\bfseries
+		Departamento de Química\\
+		Divisão de Ciências Fundamentais\\
+		Instituto Tecnológico de Aeronáutica - ITA
+	}
+
+\end{center}
+
+\newpage
+
+\section{Atividades da semana 2}
+
+
+\section{Planejamento para as semanas 3 e 4}
+
+Os principais objetivos para a semana 3 e 4 envolvem o aperfeiçoamento do aplicativo \textit{web} desenvolvido, focando na revisão de suas funcionalidades e correção de eventuais \textit{bugs}. Para tanto, é necessário simular um projeto e testar cada uma das funcionalidades que o aplicativo oferece, como planejamento aleatório dos ensaios, tratamento estatístico dos dados, significância dos modelos gerados, obtenção do ponto ótimo, plot de gráficos \textit{etc}. Os exemplos utilizados nos testes do aplicativo são apresentados por Bruns \textit{et al.}\cite{barrosneto2001}.
+
+Cada funcionalidade será testada em pares, a fim de garantir a redundância na identificação das eventuais falhas do programa. Cada um dos pares de revisão irá documentar as propostas de alteração, discutir as principais prioridades e comunicá-las aos demais integrantes do grupo para o aperfeiçoamento do código.
+
+Como obejtivo secundário, pretende-se documentar o processo para um versionamento adequado do programa. Cada uma das funcionalidades será testada pelos pares de acordo com a Tabela \ref{tab:tarefas}.
+
+\begin{table}[H]
+    \centering
+    \caption{Atribuição de tarefas para a semana 2}
+    \begin{tabular}{l p{10cm}} 
+        \toprule
+        \textbf{Integrante} & \textbf{Atividade} \\
+        \midrule  
+        Caio Schaden &  \\
+        Cauã Souza &  \\
+        \hline
+        Henrique Fagundes &  \\
+        Felipe Osternes &  \\
+        \hline
+        José Hernando &  \\
+        João Evers &  \\
+        \bottomrule
+    \end{tabular}
+    \label{tab:taskmng}
+\end{table}
+
+\newpage
+
+\section*{Referências bibliográficas}
+\begingroup
+\renewcommand{\section}[2]{}
+\bibliography{referencias}
+\endgroup
+
+\end{document}
