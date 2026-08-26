@@ -94,6 +94,17 @@
 {1.5\baselineskip}
 {0.8\baselineskip}
 
+\usepackage{graphicx}
+\usepackage{listings} 
+
+\lstset{
+  language=[LaTeX]TeX,
+  basicstyle=\ttfamily\small, 
+  breaklines=true,            
+  frame=single,               
+  keywordstyle=\color{blue}   
+}
+
 \begin{document}
 \pagestyle{empty}
 
@@ -136,7 +147,7 @@
 
 		\medskip
 		
-		Data de entrega: 11/08/2026
+		Data de entrega: 26/08/2026
 	}
 
 	\vfill
@@ -153,6 +164,58 @@
 
 \section{Atividades da semana 2}
 
+As principais metas da semana 2 em relação ao desenvolvimento do \textit{software} foram cumpridas sem maiores complicações. Dentre essas metas, foram cumpridas tarefas secundárias que auxiliam o experimentalista na escrita de seus relatório, por exemplo, implementou-se uma lógica em \textit{MATLAB} que fornece automaticamente o código \textit{LaTeX} de uma tabela inserida em um arquivo ".csv", facilmente exportado de programas de planilha, como \textit{Excel}. A tabela de dados apresentada por Pereira \textit{et al.}\cite{pereira2026} transcrita no \textit{Excel} é mostrada na Figura \ref{fig:excel1}. Usando essa entrada, o programa gera o código apresentado na Figura \ref{fig:snippet1}, que pode ser facilmente compilado em qualquer interpretador de \textit{LaTeX} configurado com as bibliotecas adequadas.
+
+\begin{figure}[H]
+    \centering
+    \begin{minipage}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{excsv.jpeg}
+        \caption{Arquivo a ser inserido no programa.}
+        \label{fig:excel1}
+    \end{minipage}%
+    \hfill
+    \begin{minipage}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{snippet.jpeg}
+        \caption{Código gerado da tabela.}
+        \label{fig:snippet1}
+    \end{minipage}
+\end{figure}
+
+Nessa mesma direção, foi implementada uma função que dado um modelo qualquer e o conjunto de dados que o origina, perfoma a análise de variância e automaticamente gera em \textit{latex} uma tabela dos resultados em questão. Usando ainda o exemplo apresentado por Pereira \textit{et al}.\cite{pereira2026}, o programa retorna a tabela de ANOVA apresentada por meio da Tabela \ref{tab:ANOVA}.
+
+\begin{table}[H]
+	\centering
+
+	\caption{Análise de variância para o ajuste de um modelo do $2^{\circ}$ grau aos dados da Tabela~\ref{<<inserir referencia>>}.}
+	\label{tab:ANOVA}
+
+	\renewcommand{\arraystretch}{1.5}
+
+	\begin{tabular}{
+	>{\centering\arraybackslash}m{0.2\linewidth}
+	>{\centering\arraybackslash}m{0.2\linewidth}
+	>{\centering\arraybackslash}m{0.2\linewidth}
+	>{\centering\arraybackslash}m{0.2\linewidth}
+	}
+
+	\toprule
+	\textbf{Fonte de variação} & \textbf{Soma quadrática} & \textbf{Nº de g.l.} & \textbf{Média quadrática} \\ 
+	\midrule
+	Regressão & 4.05 & 5 & 0.81 \\ 
+	Resíduos & 0.02 & 5 & 0.00 \\ 
+	\midrule
+	Total & 4.06 & 10 & 0.41 \\ 
+	\midrule
+	\% de variação explicada & 99.55\% & & \\ 
+	\bottomrule
+	\end{tabular}
+\end{table}
+
+Os pontos de interrogação ("??") na legenda da Tabela \ref{tab:ANOVA} representam um campo vazio, onde o usuário referencia a tabela principal que contém os resultados dos ensaios experimentais conduzidos.
+
+\newpage
 
 \section{Planejamento para as semanas 3 e 4}
 
@@ -160,11 +223,11 @@ Os principais objetivos para a semana 3 e 4 envolvem o aperfeiçoamento do aplic
 
 Cada funcionalidade será testada em pares, a fim de garantir a redundância na identificação das eventuais falhas do programa. Cada um dos pares de revisão irá documentar as propostas de alteração, discutir as principais prioridades e comunicá-las aos demais integrantes do grupo para o aperfeiçoamento do código.
 
-Como obejtivo secundário, pretende-se documentar o processo para um versionamento adequado do programa. Cada uma das funcionalidades será testada pelos pares de acordo com a Tabela \ref{tab:tarefas}.
+Como obejtivo secundário, pretende-se documentar cada alteração e sua respectiva razão. Cada uma das funcionalidades será testada pelos pares de acordo com a Tabela \ref{tab:tarefas}.
 
 \begin{table}[H]
     \centering
-    \caption{Atribuição de tarefas para a semana 2}
+    \caption{Atribuição de tarefas para as semanas 3 e 4}
     \begin{tabular}{l p{10cm}} 
         \toprule
         \textbf{Integrante} & \textbf{Atividade} \\
@@ -179,8 +242,10 @@ Como obejtivo secundário, pretende-se documentar o processo para um versionamen
         João Evers &  \\
         \bottomrule
     \end{tabular}
-    \label{tab:taskmng}
+    \label{tab:tarefas}
 \end{table}
+
+Por fim, depois do cumprimento desses objetivos, pretende-se implementar uma lógica que perfome um Teste F de Snedecor para avaliar a significância estatística de termos específicos no modelo obtido por meio da regressão linear.
 
 \newpage
 
