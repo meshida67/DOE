@@ -13,6 +13,8 @@
  * variáveis e não um segundo caminho de código.
  */
 
+import { prever } from '../core/model.js';
+
 const NS = 'http://www.w3.org/2000/svg';
 
 const el = (nome, attrs = {}, pai = null) => {
@@ -199,14 +201,7 @@ export function plotarSuperficie(container, analise, opcoes = {}) {
       const x = base.slice();
       x[iX] = -limite + (2 * limite * i) / (N - 1);
       x[iY] = -limite + (2 * limite * j) / (N - 1);
-      let s = 0;
-      for (let t = 0; t < ajuste.termos.length; t++) {
-        const termo = ajuste.termos[t];
-        s += ajuste.beta[t] * (termo.tipo === 'intercepto' ? 1
-          : termo.tipo === 'linear' ? x[termo.i]
-          : termo.tipo === 'quadratico' ? x[termo.i] * x[termo.i]
-          : x[termo.i] * x[termo.j]);
-      }
+      const s = prever(x, ajuste.beta, ajuste.termos);
       linha.push(s);
       if (s < zMin) zMin = s;
       if (s > zMax) zMax = s;
@@ -376,13 +371,7 @@ export function plotarSuperficie(container, analise, opcoes = {}) {
     const cx = ((sx - L) / pw) * 2 * limite - limite;
     const cy = ((Topo + ph - sy) / ph) * 2 * limite - limite;
     const x = base.slice(); x[iX] = cx; x[iY] = cy;
-    let s = 0;
-    ajuste.termos.forEach((termo, t) => {
-      s += ajuste.beta[t] * (termo.tipo === 'intercepto' ? 1
-        : termo.tipo === 'linear' ? x[termo.i]
-        : termo.tipo === 'quadratico' ? x[termo.i] * x[termo.i]
-        : x[termo.i] * x[termo.j]);
-    });
+    const s = prever(x, ajuste.beta, ajuste.termos);
     const rc = container.getBoundingClientRect();
     tip.mostrar(
       `${fx.nome}: <strong>${fmt(real(cx, fx))}</strong> ${fx.unidade || ''}<br>` +
@@ -463,7 +452,14 @@ export function plotarEfeitos(container, analise) {
       }
     }
 
-    const forade = positivo ? px(Math.max(c.valor, c.ic[1])) + 8 : px(Math.min(c.valor, c.ic[0])) - 8;
+    // c.ic pode vir [NaN, NaN] (ajuste exato, sem erro-padrão a reportar) —
+    // sem o `isFinite`, Math.max/min com NaN devolve NaN e o rótulo do valor
+    // ganha um x="NaN" (SVG ignora e usa 0, jogando o texto para fora do
+    // gráfico).
+    const extremo = positivo
+      ? (isFinite(c.ic[1]) ? Math.max(c.valor, c.ic[1]) : c.valor)
+      : (isFinite(c.ic[0]) ? Math.min(c.valor, c.ic[0]) : c.valor);
+    const forade = positivo ? px(extremo) + 8 : px(extremo) - 8;
     const val = el('text', {
       x: Math.max(L - 4, Math.min(W - R - 4, forade)), y,
       'text-anchor': positivo ? 'start' : 'end', 'dominant-baseline': 'middle',

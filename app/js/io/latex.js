@@ -61,9 +61,12 @@ export function tabelaEnsaios(analise) {
   });
 }
 
+const NOME_MODELO = { quadratico: 'quadrático', cubicoReduzido: 'cúbico', cubicoCompleto: 'cúbico completo' };
+
 /** ANOVA, com falta de ajuste quando há repetições. */
 export function tabelaAnova(analise) {
   const a = analise.anova;
+  const nomeModelo = NOME_MODELO[analise.modelo] || 'quadrático';
   const linhas = [
     ['Regressão', n(a.sqRegressao), a.glRegressao, n(a.qmRegressao), n(a.fRegressao, 2)],
     ['Resíduos', n(a.sqResiduo), a.glResiduo, n(a.qmResiduo), ''],
@@ -76,13 +79,23 @@ export function tabelaAnova(analise) {
   }
   linhas.push('\\midrule', ['Total', n(a.sqTotal), a.glTotal, n(a.qmTotal), '']);
   linhas.push('\\midrule', ['\\% de variação explicada', `${n(a.r2 * 100, 2)}\\%`, '', '', '']);
+  if (isFinite(a.r2Ajustado)) linhas.push(['\\% explicada (ajustada)', `${n(a.r2Ajustado * 100, 2)}\\%`, '', '', '']);
   if (a.temErroPuro) {
     linhas.push(['\\% máxima explicável', `${n(a.r2Maximo * 100, 2)}\\%`, '', '', '']);
   }
+  if (isFinite(analise.ajuste.r2Predito)) {
+    linhas.push(['\\% prevista (PRESS)', `${n(analise.ajuste.r2Predito * 100, 2)}\\%`, '', '', '']);
+  }
 
   const notas = [];
-  if (isFinite(a.pRegressao)) notas.push(`Regressão significativa a $p = ${n(a.pRegressao, 4)}$.`);
-  if (a.temErroPuro && isFinite(a.pFaltaAjuste)) {
+  if (a.ajusteExato) {
+    notas.push('O modelo reproduziu os resultados exatamente (dados de um cálculo, sem erro aleatório); os testes de significância não se aplicam.');
+  } else if (isFinite(a.pRegressao)) {
+    notas.push(`Regressão significativa a $p = ${n(a.pRegressao, 4)}$.`);
+  }
+  if (a.temErroPuro && a.semRuido) {
+    notas.push('As repetições do ensaio central deram valores idênticos: o teste de falta de ajuste não se aplica.');
+  } else if (a.temErroPuro && isFinite(a.pFaltaAjuste)) {
     notas.push(a.pFaltaAjuste < 0.05
       ? `Falta de ajuste significativa ($p = ${n(a.pFaltaAjuste, 4)}$).`
       : `Sem evidência de falta de ajuste ($p = ${n(a.pFaltaAjuste, 4)}$).`);
@@ -92,7 +105,7 @@ export function tabelaAnova(analise) {
     colunas: 'l c c c c',
     cabecalho: ['Fonte de variação', 'Soma quadrática', 'N\\textsuperscript{o} de g.l.', 'Média quadrática', '$F$'],
     linhas,
-    caption: `Análise de variância para o ajuste do modelo quadrático aos dados da Tabela~\\ref{tab:ensaios}.`,
+    caption: `Análise de variância para o ajuste do modelo ${nomeModelo} aos dados da Tabela~\\ref{tab:ensaios}.`,
     label: 'tab:anova',
     notas,
   });
@@ -101,6 +114,7 @@ export function tabelaAnova(analise) {
 /** Coeficientes do modelo, em variáveis codificadas. */
 export function tabelaCoeficientes(analise) {
   const c = analise.ajuste.coeficientes;
+  const nomeModelo = NOME_MODELO[analise.modelo] || 'quadrático';
   return tabela({
     colunas: 'l c c c',
     cabecalho: ['Termo', 'Coeficiente', 'Erro padrão', '$p$'],
@@ -110,10 +124,21 @@ export function tabelaCoeficientes(analise) {
       isFinite(x.erroPadrao) ? n(x.erroPadrao, 4) : '---',
       isFinite(x.pValor) ? n(x.pValor, 4) : '---',
     ]),
-    caption: 'Coeficientes do modelo quadrático ajustado, em variáveis codificadas.',
+    caption: `Coeficientes do modelo ${nomeModelo} ajustado, em variáveis codificadas.`,
     label: 'tab:coeficientes',
     notas: ['Variáveis codificadas no intervalo $[-1,1]$ sobre a região experimental.'],
   });
+}
+
+/** Símbolo LaTeX de um termo a partir dos seus expoentes: produto de xᵢ^eᵢ, omitindo fatores de expoente 0 e o expoente quando é 1. */
+function simboloTermo(expoentes) {
+  let s = '';
+  for (let idx = 0; idx < expoentes.length; idx++) {
+    const e = expoentes[idx];
+    if (e === 0) continue;
+    s += `x_{${idx + 1}}${e > 1 ? `^{${e}}` : ''}`;
+  }
+  return s;
 }
 
 /** Equação do modelo ajustado, em ambiente equation. */
@@ -126,10 +151,7 @@ export function equacaoModelo(analise) {
     if (Math.abs(v) < 1e-12) return;
     const sinal = v >= 0 ? '+' : '-';
     const mag = n(Math.abs(v), 3);
-    let simbolo = '';
-    if (c.tipo === 'linear') simbolo = `x_{${c.i + 1}}`;
-    else if (c.tipo === 'quadratico') simbolo = `x_{${c.i + 1}}^{2}`;
-    else if (c.tipo === 'interacao') simbolo = `x_{${c.i + 1}}x_{${c.j + 1}}`;
+    const simbolo = simboloTermo(c.expoentes);
     termos.push(termos.length === 0 && c.tipo === 'intercepto'
       ? mag
       : `${sinal} ${mag}${simbolo ? `\\,${simbolo}` : ''}`);
@@ -154,26 +176,29 @@ export function equacaoModelo(analise) {
 
 /** Parágrafo com a conclusão, pronto para adaptar no relatório. */
 export function paragrafoConclusao(analise) {
-  const { meta, otimo, anova: a } = analise;
+  const { meta, otimo, anova: a, modelo } = analise;
   const f = meta.fatores;
+  const nomeModelo = NOME_MODELO[modelo] || 'quadrático';
   const cond = f.map((x, j) =>
     `${escaparLatex(x.nome)} de ${n(otimo.recomendado.reais[j], x.casasDecimais ?? 2)}${x.unidade ? `\\,${escaparLatex(x.unidade)}` : ''}`
   ).join(', ');
 
   const partes = [
-    `O ajuste do modelo quadrático explicou ${n(a.r2 * 100, 2)}\\% da variação observada` +
+    `O ajuste do modelo ${nomeModelo} explicou ${n(a.r2 * 100, 2)}\\% da variação observada` +
     (a.temErroPuro ? `, de um máximo explicável de ${n(a.r2Maximo * 100, 2)}\\%` : '') + '.',
   ];
-  if (a.temErroPuro && isFinite(a.pFaltaAjuste)) {
+  if (a.ajusteExato) {
+    partes.push('O modelo reproduziu os resultados exatamente (dados de um cálculo, sem erro aleatório), de modo que os testes de significância estatística usuais não se aplicam; a comparação entre modelos foi feita pela capacidade de previsão (PRESS).');
+  } else if (a.temErroPuro && isFinite(a.pFaltaAjuste)) {
     partes.push(a.pFaltaAjuste < 0.05
-      ? `O teste de falta de ajuste foi significativo ($p = ${n(a.pFaltaAjuste, 4)}$), indicando que o modelo quadrático não descreve integralmente a superfície na região estudada.`
+      ? `O teste de falta de ajuste foi significativo ($p = ${n(a.pFaltaAjuste, 4)}$), indicando que o modelo ${nomeModelo} não descreve integralmente a superfície na região estudada.`
       : `O teste de falta de ajuste não foi significativo ($p = ${n(a.pFaltaAjuste, 4)}$), de modo que o modelo é adequado dentro da precisão experimental.`);
   }
   partes.push(
-    `A análise canônica classificou o ponto estacionário como ${{
+    `A análise canônica classificou${otimo.canonica.local ? ', localmente, ' : ' '}o ponto estacionário como ${{
       maximo: 'um ponto de máximo', minimo: 'um ponto de mínimo',
       sela: 'um ponto de sela', cume: 'um cume alongado',
-    }[otimo.canonica.tipo]}.`
+    }[otimo.canonica.tipo]}${otimo.canonica.local ? ' — classificação válida só nas vizinhanças do ponto, não na região inteira' : ''}.`
   );
   partes.push(
     `A condição ótima dentro da região experimental corresponde a ${cond}, ` +

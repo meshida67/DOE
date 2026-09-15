@@ -204,6 +204,15 @@ export function telaDefinir(estado) {
           </select>
           <div class="ajuda">Todas as opções respeitam os limites informados. Na dúvida, deixe a primeira.</div>
         </div>
+        <div class="campo">
+          <label for="cfg-modelo">Formato da curva</label>
+          <select id="cfg-modelo">
+            <option value="quadratico" ${(cfg.modelo ?? 'quadratico') === 'quadratico' ? 'selected' : ''}>Curvatura simples (recomendado)</option>
+            <option value="cubicoReduzido" ${cfg.modelo === 'cubicoReduzido' ? 'selected' : ''}>Curvatura em S — mesmos ensaios</option>
+            <option value="cubicoCompleto" ${cfg.modelo === 'cubicoCompleto' ? 'selected' : ''}>Curvatura em S completa — exige mais ensaios</option>
+          </select>
+          <div class="ajuda">Use "curvatura em S" se a resposta muda de comportamento dentro da faixa testada (por exemplo, sobe e depois estabiliza) e a curvatura simples não descreveu bem os resultados. A opção do meio não pede nenhum ensaio a mais; a completa pede vários. Exige "Distribuição mais uniforme" ou "Efeitos mais independentes" acima.</div>
+        </div>
       </div>
     </details>
   </div>
@@ -220,7 +229,7 @@ export function telaPlano(estado) {
   const { meta, ensaios, diagnostico } = estado;
   const f = meta.fatores;
   const emOrdem = [...ensaios].sort((a, b) => a.ordemExecucao - b.ordemExecucao);
-  const nomeTipo = { fatorial: 'Vértice', axial: 'Eixo', central: 'Centro (repetição)' };
+  const nomeTipo = { fatorial: 'Vértice', axial: 'Eixo', central: 'Centro (repetição)', complementar: 'Face/aresta' };
 
   return `
   ${passos('plano')}
@@ -315,7 +324,7 @@ export function telaAnalise(estado) {
   const ganho = otimo.recomendado.previsto - melhorFeito.resposta;
   const casasResposta = casasPorIncerteza(otimo.recomendado.erroPadrao);
 
-  const nomeTipo = { fatorial: 'Vértice', axial: 'Eixo', central: 'Centro', desconhecido: '—' };
+  const nomeTipo = { fatorial: 'Vértice', axial: 'Eixo', central: 'Centro', complementar: 'Face/aresta', desconhecido: '—' };
   const tipoSuperficie = { maximo: 'Pico bem definido', minimo: 'Vale bem definido', sela: 'Ponto de sela', cume: 'Cume alongado' };
 
   return `
@@ -348,14 +357,14 @@ export function telaAnalise(estado) {
   ${an.ignorados > 0 ? caixaAviso('info', `${an.ignorados} ensaio(s) sem resultado foram desconsiderados.`) : ''}
 
   <div class="abas" role="tablist">
-    <button class="aba ativa" data-aba="superficie" role="tab">Mapa do experimento</button>
-    <button class="aba" data-aba="efeitos" role="tab">O que mais influencia</button>
-    <button class="aba" data-aba="qualidade" role="tab">Confiabilidade</button>
-    <button class="aba" data-aba="ensaios" role="tab">Seus ensaios</button>
-    <button class="aba" data-aba="tecnico" role="tab">Detalhes técnicos</button>
+    <button class="aba${estado.abaAnalise === 'superficie' ? ' ativa' : ''}" data-aba="superficie" role="tab">Mapa do experimento</button>
+    <button class="aba${estado.abaAnalise === 'efeitos' ? ' ativa' : ''}" data-aba="efeitos" role="tab">O que mais influencia</button>
+    <button class="aba${estado.abaAnalise === 'qualidade' ? ' ativa' : ''}" data-aba="qualidade" role="tab">Confiabilidade</button>
+    <button class="aba${estado.abaAnalise === 'ensaios' ? ' ativa' : ''}" data-aba="ensaios" role="tab">Seus ensaios</button>
+    <button class="aba${estado.abaAnalise === 'tecnico' ? ' ativa' : ''}" data-aba="tecnico" role="tab">Detalhes técnicos</button>
   </div>
 
-  <section data-painel="superficie">
+  <section data-painel="superficie"${estado.abaAnalise !== 'superficie' ? ' class="oculto"' : ''}>
     <div class="cartao">
       <div class="cartao-titulo"><h2>Mapa do experimento</h2></div>
       <p class="secundario pequeno">
@@ -374,7 +383,7 @@ export function telaAnalise(estado) {
     </div>
   </section>
 
-  <section data-painel="efeitos" class="oculto">
+  <section data-painel="efeitos"${estado.abaAnalise !== 'efeitos' ? ' class="oculto"' : ''}>
     <div class="cartao">
       <div class="cartao-titulo"><h2>O que mais influencia o resultado</h2></div>
       <p class="secundario pequeno">
@@ -386,7 +395,28 @@ export function telaAnalise(estado) {
     </div>
   </section>
 
-  <section data-painel="qualidade" class="oculto">
+  <section data-painel="qualidade"${estado.abaAnalise !== 'qualidade' ? ' class="oculto"' : ''}>
+    <div class="cartao">
+      <div class="cartao-titulo"><h3>Formato da curva</h3></div>
+      <p class="secundario pequeno">Reanalisa os MESMOS ensaios com outro formato — útil para comparar sem precisar refazer nada.</p>
+      <div class="campo" style="max-width:26rem">
+        <select id="analise-modelo">
+          <option value="quadratico" ${(an.modelo ?? 'quadratico') === 'quadratico' ? 'selected' : ''}>Curvatura simples</option>
+          <option value="cubicoReduzido" ${an.modelo === 'cubicoReduzido' ? 'selected' : ''}>Curvatura em S — mesmos ensaios</option>
+          <option value="cubicoCompleto" ${an.modelo === 'cubicoCompleto' ? 'selected' : ''}>Curvatura em S completa</option>
+        </select>
+      </div>
+      <p class="legenda-grafico">
+        Capacidade de previsão (o que decide entre formatos, não o R²):
+        <strong>${isFinite(ajuste.r2Predito) ? `${numBR(ajuste.r2Predito * 100, 1)}%` : '—'}</strong>
+        ${isFinite(ajuste.r2Predito) && isFinite(a.r2) && (a.r2 - ajuste.r2Predito) > 0.15
+          ? ' — bem abaixo do R², sinal de que o modelo pode estar decorando os ensaios em vez de descrever a superfície.'
+          : ''}
+        ${!isFinite(ajuste.r2Predito) && ajuste.pontosNaoDeletaveis > 0
+          ? ' — não calculável: este modelo tem coeficientes demais para o número de ensaios distintos.'
+          : ''}
+      </p>
+    </div>
     <div class="grade-2">
       <div class="cartao">
         <div class="cartao-titulo"><h3>O modelo acerta seus ensaios?</h3></div>
@@ -405,12 +435,12 @@ export function telaAnalise(estado) {
       <p class="legenda-grafico">
         O modelo explica <strong>${numBR(a.r2 * 100, 1)}%</strong> da variação observada${a.temErroPuro
           ? `, de um máximo possível de <strong>${numBR(a.r2Maximo * 100, 1)}%</strong> — o restante é o ruído do próprio experimento`
-          : ''}.
+          : ''}${isFinite(a.r2Ajustado) ? `; ajustado ao número de coeficientes, <strong>${numBR(a.r2Ajustado * 100, 1)}%</strong>` : ''}.
       </p>
     </div>
   </section>
 
-  <section data-painel="ensaios" class="oculto">
+  <section data-painel="ensaios"${estado.abaAnalise !== 'ensaios' ? ' class="oculto"' : ''}>
     <div class="cartao">
       <div class="cartao-titulo"><h2>Seus ensaios</h2></div>
       <div class="tabela-envolve">
@@ -436,12 +466,12 @@ export function telaAnalise(estado) {
     </div>
   </section>
 
-  <section data-painel="tecnico" class="oculto">
+  <section data-painel="tecnico"${estado.abaAnalise !== 'tecnico' ? ' class="oculto"' : ''}>
     <div class="cartao">
       <div class="cartao-titulo"><h2>Detalhes técnicos</h2></div>
       <p class="secundario pequeno">Esta aba existe para o relatório. Nada aqui é necessário para usar a ferramenta.</p>
 
-      <h3 style="margin-top:1.25rem">Coeficientes do modelo quadrático</h3>
+      <h3 style="margin-top:1.25rem">Coeficientes do modelo ${{ quadratico: 'quadrático', cubicoReduzido: 'cúbico', cubicoCompleto: 'cúbico completo' }[an.modelo] || 'quadrático'}</h3>
       <p class="secundario pequeno">Em variáveis codificadas, com a região experimental mapeada em [−1, +1].</p>
       <div class="tabela-envolve"><table class="dados">
         <thead><tr><th>Termo</th><th>Significado</th><th>Coeficiente</th><th>Erro padrão</th><th>t</th><th>p</th></tr></thead>
@@ -455,16 +485,19 @@ export function telaAnalise(estado) {
         </tr>`).join('')}</tbody>
       </table></div>
 
-      <h3 style="margin-top:1.5rem">Análise canônica</h3>
+      <h3 style="margin-top:1.5rem">Análise canônica${otimo.canonica.local ? ' (local, perto do ponto avaliado)' : ''}</h3>
+      ${otimo.canonica.local ? '<p class="secundario pequeno">Num modelo cúbico a curvatura muda de ponto para ponto — esta classificação vale só nas vizinhanças do ponto abaixo, não na faixa inteira.</p>' : ''}
       <div class="tabela-envolve"><table class="dados">
         <thead><tr><th>Item</th><th>Valor</th></tr></thead>
         <tbody>
           <tr><td class="texto">Classificação da superfície</td><td class="texto">${esc(tipoSuperficie[otimo.canonica.tipo] || otimo.canonica.tipo)}</td></tr>
-          <tr><td class="texto">Autovalores de B</td><td class="texto mono">${otimo.canonica.autovalores.map((v) => numBR(v, 4)).join(' ; ')}</td></tr>
+          <tr><td class="texto">Autovalores da curvatura local</td><td class="texto mono">${otimo.canonica.autovalores.map((v) => numBR(v, 4)).join(' ; ')}</td></tr>
           ${otimo.estacionario ? `
           <tr><td class="texto">Ponto estacionário (codificado)</td><td class="texto mono">${otimo.estacionario.codificados.map((v) => numBR(v, 4)).join(' ; ')}</td></tr>
           <tr><td class="texto">Ponto estacionário (real)</td><td class="texto mono">${otimo.estacionario.reais.map((v, j) => `${numBR(v, f[j].casasDecimais ?? 2)} ${esc(f[j].unidade || '')}`).join(' ; ')}</td></tr>
           <tr><td class="texto">Dentro da região experimental</td><td class="texto">${otimo.estacionario.dentroDaRegiao ? 'sim' : 'não'}</td></tr>` : ''}
+          ${otimo.estacionarios && otimo.estacionarios.length > 1 ? `
+          <tr><td class="texto">Outros pontos de inclinação nula</td><td class="texto">${otimo.estacionarios.length} ao todo — ${otimo.estacionarios.map((e) => tipoSuperficie[e.canonica.tipo] || e.canonica.tipo).join(', ')}</td></tr>` : ''}
         </tbody>
       </table></div>
 

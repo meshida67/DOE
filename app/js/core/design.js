@@ -11,6 +11,7 @@
  */
 
 import { extremeCoded } from './coding.js';
+import { montarTermos } from './model.js';
 
 export const MAX_FATORES = 4;
 export const MIN_FATORES = 2;
@@ -99,6 +100,30 @@ export function blocoCentral(k, n) {
 }
 
 /**
+ * Bloco complementar: os pontos do fatorial de 3 níveis {-1,0,1} que faltam
+ * para o cúbico completo — faces e arestas do cubo (3^k − 2^k − 1 pontos).
+ * Necessário porque os termos mistos xᵢ²xⱼ são colineares com qualquer CCD:
+ * os blocos fatorial (nenhuma coordenada 0) e central (todas 0) já existem,
+ * então aqui ficam só os pontos com ALGUMA coordenada 0, mas não todas.
+ * O fator 1 varia mais rápido, para casar com a ordem de Yates de `blocoFatorial`.
+ */
+export function blocoComplementar(k) {
+  const linhas = [];
+  const total = Math.pow(3, k);
+  for (let n = 0; n < total; n++) {
+    const linha = [];
+    for (let j = 0; j < k; j++) {
+      const digito = Math.floor(n / Math.pow(3, j)) % 3;
+      linha.push(digito - 1);
+    }
+    const temZero = linha.some((v) => v === 0);
+    const todasZero = linha.every((v) => v === 0);
+    if (temZero && !todasZero) linhas.push(linha);
+  }
+  return linhas;
+}
+
+/**
  * Monta a matriz do planejamento em coordenadas codificadas.
  * Devolve as linhas em ordem padrão, com tipo e ordem de execução sorteada.
  *
@@ -108,17 +133,22 @@ export function blocoCentral(k, n) {
  * @param {number} opcoes.pontosCentrais
  * @param {boolean} opcoes.aleatorizar
  * @param {number} opcoes.semente
+ * @param {string} opcoes.modelo        'quadratico' | 'cubicoReduzido' | 'cubicoCompleto'
  */
-export function gerarMatrizCCD({ k, alpha, pontosCentrais, aleatorizar = true, semente = 1 }) {
+export function gerarMatrizCCD({ k, alpha, pontosCentrais, aleatorizar = true, semente = 1, modelo = 'quadratico' }) {
   if (k < MIN_FATORES || k > MAX_FATORES) {
     throw new Error(`O planejamento composto central aqui suporta de ${MIN_FATORES} a ${MAX_FATORES} fatores (recebido: ${k}).`);
   }
   if (!(pontosCentrais >= 1)) throw new Error('É preciso ao menos 1 ponto central.');
 
+  // O bloco complementar só existe no cúbico completo, e entra DEPOIS do
+  // central: os blocos fatorial/axial/central mantêm o `ordemPadrao` de
+  // sempre, e planejamentos sem esse bloco embaralham exatamente como hoje.
   const linhas = [
     ...blocoFatorial(k).map((c) => ({ codificados: c, tipo: 'fatorial' })),
     ...blocoAxial(k, alpha).map((c) => ({ codificados: c, tipo: 'axial' })),
     ...blocoCentral(k, pontosCentrais).map((c) => ({ codificados: c, tipo: 'central' })),
+    ...(modelo === 'cubicoCompleto' ? blocoComplementar(k).map((c) => ({ codificados: c, tipo: 'complementar' })) : []),
   ].map((linha, i) => ({ ...linha, ordemPadrao: i + 1 }));
 
   // Ordem de execução aleatória: protege contra tendências temporais
@@ -137,20 +167,22 @@ export function gerarMatrizCCD({ k, alpha, pontosCentrais, aleatorizar = true, s
   return linhas;
 }
 
-/** Número de coeficientes do modelo quadrático completo com k fatores. */
-export function numeroParametros(k) {
-  return 1 + k + k + (k * (k - 1)) / 2;
+/** Número de coeficientes do modelo, para o grau pedido (delega em `montarTermos`, a fonte única da lista de termos). */
+export function numeroParametros(k, modelo = 'quadratico') {
+  return montarTermos(k, null, modelo).length;
 }
 
 /**
  * Diagnóstico do planejamento, em linguagem que o usuário final entende.
  * Roda ANTES dos ensaios, quando ainda dá para corrigir.
  */
-export function diagnosticarPlanejamento({ k, alpha, pontosCentrais, limitMode }) {
-  const N = Math.pow(2, k) + 2 * k + pontosCentrais;
-  const p = numeroParametros(k);
+export function diagnosticarPlanejamento({ k, alpha, pontosCentrais, limitMode, modelo = 'quadratico' }) {
+  const pontosComplementares = modelo === 'cubicoCompleto' ? Math.pow(3, k) - Math.pow(2, k) - 1 : 0;
+  const N = Math.pow(2, k) + 2 * k + pontosCentrais + pontosComplementares;
+  const p = numeroParametros(k, modelo);
   const glResiduo = N - p;
   const glErroPuro = pontosCentrais - 1;
+  const glFaltaAjuste = glResiduo - glErroPuro;
   const avisos = [];
 
   if (glResiduo < 0) {
@@ -174,12 +206,23 @@ export function diagnosticarPlanejamento({ k, alpha, pontosCentrais, limitMode }
       nivel: 'aviso',
       texto: 'Com apenas 2 repetições no ponto central a estimativa do erro experimental é frágil. 3 repetições é o mínimo confortável.',
     });
+  } else if (glFaltaAjuste < 1) {
+    avisos.push({
+      nivel: 'aviso',
+      texto: 'Os ensaios além das repetições do centro são só o suficiente para estimar os coeficientes do modelo — não sobra nenhum para testar se o modelo descreve bem os dados. Aumentar as repetições no centro não ajuda aqui; seria preciso mais ensaios distintos.',
+    });
   }
   if (limitMode === 'fatorial' && alpha > 1) {
     const excesso = ((alpha - 1) * 100).toFixed(0);
     avisos.push({
       nivel: 'aviso',
       texto: `Alguns ensaios vão pedir valores até ${excesso}% além dos limites informados. Confirme que esses valores são viáveis no laboratório.`,
+    });
+  }
+  if (modelo !== 'quadratico' && alpha > 1 + 1e-9 && alpha < 1.2) {
+    avisos.push({
+      nivel: 'aviso',
+      texto: 'Com esta distribuição, os termos em S ficam com incerteza bem maior que o ruído do experimento. "Distribuição mais uniforme" dá resultados mais confiáveis para esse modelo.',
     });
   }
 
@@ -191,6 +234,8 @@ export function diagnosticarPlanejamento({ k, alpha, pontosCentrais, limitMode }
     pontosFatoriais: Math.pow(2, k),
     pontosAxiais: 2 * k,
     pontosCentrais,
+    pontosComplementares,
+    modelo,
     alpha,
     extremoCodificado: extremeCoded(alpha),
     avisos,

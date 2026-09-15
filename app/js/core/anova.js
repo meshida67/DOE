@@ -33,8 +33,13 @@ function agrupar(chaves) {
  * @param {number[]} entrada.previstos         valores ajustados pelo modelo
  * @param {number}   entrada.numeroParametros  coeficientes do modelo (inclui b0)
  * @param {string[]} entrada.chavesReplica     identidade do ponto planejado
+ * @param {boolean}  [entrada.ajusteExato]     vem de `ajustar` — dados de um
+ *   simulador (sem erro aleatório) cujo modelo reproduziu os pontos a menos
+ *   de arredondamento. Sem essa guarda, qmResiduo ~1e-28 faz fRegressao
+ *   explodir para ~1e29 em vez de para o Infinity que uma guarda ingênua
+ *   pegaria — o denominador nunca é EXATAMENTE zero, só desprezível.
  */
-export function anova({ y, previstos, numeroParametros, chavesReplica }) {
+export function anova({ y, previstos, numeroParametros, chavesReplica, ajusteExato = false }) {
   const n = y.length;
   const p = numeroParametros;
   const media = mean(y);
@@ -52,7 +57,7 @@ export function anova({ y, previstos, numeroParametros, chavesReplica }) {
   const qmResiduo = glResiduo > 0 ? sqResiduo / glResiduo : NaN;
   const qmTotal = glTotal > 0 ? sqTotal / glTotal : NaN;
 
-  const fRegressao = glResiduo > 0 ? qmRegressao / qmResiduo : NaN;
+  const fRegressao = glResiduo > 0 && !ajusteExato ? qmRegressao / qmResiduo : NaN;
   const pRegressao = fPValue(fRegressao, glRegressao, glResiduo);
 
   const r2 = sqTotal > 0 ? 1 - sqResiduo / sqTotal : NaN;
@@ -65,7 +70,9 @@ export function anova({ y, previstos, numeroParametros, chavesReplica }) {
     qmRegressao, qmResiduo, qmTotal,
     fRegressao, pRegressao,
     r2, r2Ajustado,
+    ajusteExato,
     temErroPuro: false,
+    semRuido: false,
   };
 
   // ── Erro puro e falta de ajuste ────────────────────────────────────────
@@ -80,16 +87,25 @@ export function anova({ y, previstos, numeroParametros, chavesReplica }) {
         sqErroPuro += valores.reduce((s, v) => s + (v - m) ** 2, 0);
         glErroPuro += g.length - 1;
       }
-      const sqFaltaAjuste = sqResiduo - sqErroPuro;
+      // As réplicas deram valores praticamente idênticos: dados de um
+      // cálculo, não de uma medição. O teste de falta de ajuste compararia
+      // contra um ruído que é desprezível por construção — daí o limiar
+      // RELATIVO (não `=== 0`): arredondamento de ponto flutuante raramente
+      // zera exatamente (a mesma razão de `ajusteExato` em `model.js`). Sem
+      // isso, sqErroPuro ~1e-20 gera um F astronômico e um "falta de ajuste
+      // significativa" tão falso quanto o problema que a guarda evita.
+      const semRuido = sqErroPuro <= 1e-8 * Math.max(sqTotal, 1e-300);
+      const sqFaltaAjuste = Math.max(0, sqResiduo - sqErroPuro);
       const glFaltaAjuste = glResiduo - glErroPuro;
 
       const qmErroPuro = glErroPuro > 0 ? sqErroPuro / glErroPuro : NaN;
       const qmFaltaAjuste = glFaltaAjuste > 0 ? sqFaltaAjuste / glFaltaAjuste : NaN;
-      const fFaltaAjuste = glFaltaAjuste > 0 && qmErroPuro > 0 ? qmFaltaAjuste / qmErroPuro : NaN;
+      const fFaltaAjuste = glFaltaAjuste > 0 && qmErroPuro > 0 && !semRuido ? qmFaltaAjuste / qmErroPuro : NaN;
       const pFaltaAjuste = fPValue(fFaltaAjuste, glFaltaAjuste, glErroPuro);
 
       Object.assign(resultado, {
         temErroPuro: true,
+        semRuido,
         sqErroPuro, glErroPuro, qmErroPuro,
         sqFaltaAjuste, glFaltaAjuste, qmFaltaAjuste,
         fFaltaAjuste, pFaltaAjuste,
@@ -112,6 +128,13 @@ export function interpretar(a, nivel = 0.05) {
   const mensagens = [];
   let veredito = 'ok';
 
+  if (a.ajusteExato) {
+    mensagens.push({
+      nivel: 'neutro',
+      texto: 'O modelo reproduz todos os resultados exatamente. Isso acontece quando os dados vêm de um cálculo, não de uma medição — não há erro experimental, e nenhum teste estatístico se aplica. Compare modelos pela capacidade de previsão, não pelo R².',
+    });
+  }
+
   if (isFinite(a.pRegressao)) {
     if (a.pRegressao < nivel) {
       mensagens.push({
@@ -127,7 +150,17 @@ export function interpretar(a, nivel = 0.05) {
     }
   }
 
-  if (a.temErroPuro && isFinite(a.pFaltaAjuste)) {
+  if (!a.temErroPuro) {
+    mensagens.push({
+      nivel: 'neutro',
+      texto: 'Sem repetições, não foi possível testar se o modelo descreve bem os dados. Repetir o ponto central resolveria isso no próximo planejamento.',
+    });
+  } else if (a.semRuido) {
+    mensagens.push({
+      nivel: 'neutro',
+      texto: 'As repetições do ensaio central deram resultados idênticos: este conjunto de dados não tem ruído experimental para comparar. O teste de adequação do modelo não se aplica — o que ele mediria é exatamente zero.',
+    });
+  } else if (isFinite(a.pFaltaAjuste)) {
     if (a.pFaltaAjuste < nivel) {
       veredito = veredito === 'ruim' ? 'ruim' : 'atencao';
       mensagens.push({
@@ -140,11 +173,6 @@ export function interpretar(a, nivel = 0.05) {
         texto: 'O modelo descreve os dados dentro do ruído do próprio experimento — não há sinal de que ele esteja errando o formato da superfície.',
       });
     }
-  } else {
-    mensagens.push({
-      nivel: 'neutro',
-      texto: 'Sem repetições, não foi possível testar se o modelo descreve bem os dados. Repetir o ponto central resolveria isso no próximo planejamento.',
-    });
   }
 
   if (isFinite(a.r2)) {

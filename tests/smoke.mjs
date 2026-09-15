@@ -3,7 +3,7 @@
  * se o pipeline recupera coeficientes, ponto estacionário e classificação.
  */
 import { criarPlanejamento, analisarResultados } from '../app/js/core/pipeline.js';
-import { prever, montarTermos } from '../app/js/core/model.js';
+import { prever, montarTermos, matrizB, hessiana } from '../app/js/core/model.js';
 import { paraCodificado } from '../app/js/core/coding.js';
 
 let falhas = 0;
@@ -144,6 +144,180 @@ const ens3 = p3.ensaios.map((e) => ({
 const r3 = analisarResultados(p3.meta, ens3);
 ok('recupera os 10 coeficientes com 3 fatores', VERDADE3.every((v, i) => perto(r3.ajuste.beta[i], v, 1e-8)));
 ok('classificada como máximo (todas as curvaturas negativas)', r3.otimo.canonica.tipo === 'maximo', `(${r3.otimo.canonica.tipo})`);
+
+console.log('\n— Modelo cúbico —');
+
+// hessiana deve ser BIT-IDÊNTICA a 2·matrizB para qualquer modelo quadrático:
+// é essa igualdade que garante que trocar matrizB por hessiana em optimize.js
+// não move os casos de referência nem um último bit.
+{
+  let bitExato = true;
+  for (const k of [2, 3, 4]) {
+    const termos = montarTermos(k);
+    for (let t = 0; t < 30 && bitExato; t++) {
+      const beta = termos.map(() => (Math.random() - 0.5) * 20);
+      const x = Array.from({ length: k }, () => (Math.random() - 0.5) * 4);
+      const B = matrizB(beta, termos, k);
+      const H = hessiana(x, beta, termos, k);
+      for (let i = 0; i < k && bitExato; i++) {
+        for (let j = 0; j < k && bitExato; j++) if (H[i][j] !== 2 * B[i][j]) bitExato = false;
+      }
+    }
+  }
+  ok('hessiana(x, ...) === 2·matrizB(...) bit a bit, para qualquer x (quadrático)', bitExato);
+}
+
+// Prefixos encaixados: quadratico ⊂ cubicoReduzido ⊂ cubicoCompleto.
+{
+  const q = montarTermos(2, null, 'quadratico');
+  const r = montarTermos(2, null, 'cubicoReduzido');
+  const c = montarTermos(2, null, 'cubicoCompleto');
+  ok('quadratico(k=2) tem 6 termos', q.length === 6);
+  ok('cubicoReduzido(k=2) tem 8 termos', r.length === 8, `(${r.length})`);
+  ok('cubicoCompleto(k=2) tem 10 termos', c.length === 10, `(${c.length})`);
+  ok('cubicoReduzido(3) tem 14 termos', montarTermos(3, null, 'cubicoReduzido').length === 14);
+  ok('cubicoReduzido(4) tem 23 termos', montarTermos(4, null, 'cubicoReduzido').length === 23);
+  ok('cubicoCompleto(3) tem 20 termos', montarTermos(3, null, 'cubicoCompleto').length === 20);
+  ok('quadratico é prefixo de cubicoReduzido', r.slice(0, 6).every((t, i) => t.rotulo === q[i].rotulo));
+  ok('cubicoReduzido é prefixo de cubicoCompleto', c.slice(0, 8).every((t, i) => t.rotulo === r[i].rotulo));
+}
+
+// Recuperação exata de um cúbico reduzido sintético (8 coeficientes), CCD
+// rotacionável k=2 — sem nenhum ensaio além do CCD de sempre.
+{
+  const specCubico = {
+    experimento: { nome: 'Cúbico sintético' },
+    resposta: { nome: 'Rendimento', unidade: '%', objetivo: 'maximizar' },
+    fatores: [
+      { nome: 'Temperatura', unidade: 'C', min: 40, max: 60, casasDecimais: 8 },
+      { nome: 'Concentracao', unidade: 'M', min: 0.1, max: 0.5, casasDecimais: 8 },
+    ],
+    config: { tipoAlpha: 'rotacionavel', pontosCentrais: 3, modelo: 'cubicoReduzido' },
+  };
+  const { meta, ensaios } = criarPlanejamento(specCubico);
+  ok('CCD cúbico reduzido k=2 continua com 11 ensaios (nenhum extra)', ensaios.length === 11, `(${ensaios.length})`);
+  const VERDADE_CUBICA = [80, 2, 3, -4, -5, -1, 0.8, -0.6];
+  const termosCubicos = montarTermos(2, null, 'cubicoReduzido');
+  const ensCubicos = ensaios.map((e) => ({ ...e, resposta: prever(e.codificadosPlanejados, VERDADE_CUBICA, termosCubicos) }));
+  const anCubico = analisarResultados(meta, ensCubicos);
+  ok('recupera os 8 coeficientes do cúbico reduzido',
+    VERDADE_CUBICA.every((v, i) => perto(anCubico.ajuste.beta[i], v, 1e-6)), `(${anCubico.ajuste.beta})`);
+
+  // O MESMO conjunto de ensaios, reanalisado como quadrático, não deve
+  // recuperar o modelo (é o cenário do usuário: quadrático descreve mal).
+  const anQuad = analisarResultados(meta, ensCubicos, { modelo: 'quadratico' });
+  ok('reanalisar como quadrático (mesmos ensaios) tem resíduo bem maior que o cúbico',
+    anQuad.ajuste.sqResiduo > 1e6 * Math.max(anCubico.ajuste.sqResiduo, 1e-300));
+}
+
+// α = 1 ("face") torna qualquer termo cúbico indistinguível do linear —
+// tem que ser bloqueado na validação, e não só falhar depois com "singular".
+{
+  const base = {
+    experimento: { nome: 'Bloqueio de α' },
+    resposta: { nome: 'R' },
+    fatores: [{ nome: 'A', min: 0, max: 10 }, { nome: 'B', min: 0, max: 10 }],
+  };
+  const tentarCubico = (config) => { try { criarPlanejamento({ ...base, config }); return null; } catch (e) { return e.erros || [e.message]; } };
+  ok('rejeita cúbico + "face" (α=1 exato)',
+    tentarCubico({ tipoAlpha: 'face', modelo: 'cubicoReduzido' }) !== null);
+  ok('rejeita cúbico + "ortogonal" com k=2/nc=1 (α=1 exato por coincidência)',
+    tentarCubico({ tipoAlpha: 'ortogonal', pontosCentrais: 1, modelo: 'cubicoReduzido' }) !== null);
+  ok('rejeita cúbico completo + "ortogonal" (perde sentido com o bloco extra)',
+    tentarCubico({ tipoAlpha: 'ortogonal', pontosCentrais: 3, modelo: 'cubicoCompleto' }) !== null);
+  const tentarK4 = () => { try { criarPlanejamento({ ...base, fatores: [...base.fatores, { nome: 'C', min: 0, max: 10 }, { nome: 'D', min: 0, max: 10 }], config: { tipoAlpha: 'rotacionavel', modelo: 'cubicoCompleto' } }); return null; } catch (e) { return e.erros || [e.message]; } };
+  ok('rejeita cúbico completo com k=4 (91 ensaios seria inviável)', tentarK4() !== null);
+  ok('aceita cúbico reduzido + "rotacionavel"', tentarCubico({ tipoAlpha: 'rotacionavel', modelo: 'cubicoReduzido' }) === null);
+}
+
+// Cúbico completo k=2: acrescenta exatamente o bloco complementar (3^k−2^k−1
+// pontos), depois do central, sem mexer na ordem nem no sorteio dos blocos
+// que já existiam.
+{
+  const specCompleto = {
+    experimento: { nome: 'Completo' }, resposta: { nome: 'R' },
+    fatores: [{ nome: 'A', min: 0, max: 10 }, { nome: 'B', min: 0, max: 10 }],
+    config: { tipoAlpha: 'rotacionavel', pontosCentrais: 3, modelo: 'cubicoCompleto' },
+  };
+  const { ensaios: ensCompleto } = criarPlanejamento(specCompleto);
+  ok('cúbico completo k=2 gera 15 ensaios (11 do CCD + 4 complementares)', ensCompleto.length === 15, `(${ensCompleto.length})`);
+  const complementares = ensCompleto.filter((e) => e.tipo === 'complementar');
+  ok('4 ensaios do tipo "complementar"', complementares.length === 4, `(${complementares.length})`);
+  ok('complementares ocupam ordemPadrao 12..15', complementares.every((e) => e.ordemPadrao >= 12 && e.ordemPadrao <= 15));
+  ok('complementares têm coordenadas em {-1,0,1}', complementares.every((e) => e.codificadosPlanejados.every((v) => v === -1 || v === 0 || v === 1)));
+
+  // A garantia não é "os 11 primeiros do cúbico completo shufflam igual ao
+  // quadrático" (Fisher-Yates sobre arrays de tamanhos diferentes consome a
+  // mesma semente de forma diferente) — é que MODELOS QUE NÃO ACRESCENTAM
+  // bloco nenhum (quadrático e cúbico reduzido, ambos com 11 ensaios)
+  // embaralham EXATAMENTE igual, porque a única ramificação em
+  // gerarMatrizCCD é `modelo === 'cubicoCompleto'`.
+  const { ensaios: ensQuad } = criarPlanejamento({ ...specCompleto, config: { ...specCompleto.config, modelo: 'quadratico' } });
+  const { ensaios: ensReduzido } = criarPlanejamento({ ...specCompleto, config: { ...specCompleto.config, modelo: 'cubicoReduzido' } });
+  ok('quadrático e cúbico reduzido (nenhum acrescenta bloco) embaralham identicamente',
+    JSON.stringify(ensQuad.map((e) => e.ordemExecucao)) === JSON.stringify(ensReduzido.map((e) => e.ordemExecucao)));
+}
+
+// Dados sem ruído (simulador determinístico): a ferramenta não pode afirmar
+// coisas falsas — nem "sem repetições" havendo réplicas, nem F/coeficientes
+// astronômicos como se fossem confiáveis.
+{
+  const spec2 = {
+    experimento: { nome: 'Determinístico' }, resposta: { nome: 'R', objetivo: 'maximizar' },
+    fatores: [{ nome: 'T', min: 40, max: 60, casasDecimais: 6 }, { nome: 'C', min: 0.1, max: 0.5, casasDecimais: 6 }],
+    config: { tipoAlpha: 'rotacionavel', pontosCentrais: 3 },
+  };
+  const { meta: metaDet, ensaios: ensDet } = criarPlanejamento(spec2);
+  const termosDet = montarTermos(2);
+  const cheiosDet = ensDet.map((e) => ({ ...e, resposta: prever(e.codificadosPlanejados, [80, 2, 3, -4, -5, -1], termosDet) }));
+  const anDet = analisarResultados(metaDet, cheiosDet);
+  ok('detecta ajuste exato', anDet.ajuste.ajusteExato === true);
+  ok('detecta ausência de ruído nas réplicas', anDet.anova.semRuido === true);
+  ok('pFaltaAjuste fica NaN (não inventa um p-valor)', Number.isNaN(anDet.anova.pFaltaAjuste));
+  ok('coeficientes não são marcados como significativos por engano (null, não true)',
+    anDet.ajuste.coeficientes.every((c) => c.significativo === null));
+  ok('a mensagem NÃO diz "Sem repetições" (há 3)',
+    !anDet.leitura.mensagens.some((m) => m.texto.includes('Sem repetições')));
+}
+
+// PRESS discrimina overfitting mesmo quando o R² não discrimina nada (ambos
+// próximos de 1 com dados sem ruído) — é a métrica que decide entre modelos.
+{
+  const specPress = {
+    experimento: { nome: 'PRESS' }, resposta: { nome: 'R', objetivo: 'maximizar' },
+    fatores: [{ nome: 'T', min: 40, max: 60, casasDecimais: 8 }, { nome: 'C', min: 0.1, max: 0.5, casasDecimais: 8 }],
+    config: { tipoAlpha: 'rotacionavel', pontosCentrais: 3 },
+  };
+  const { meta: metaPress, ensaios: ensPress } = criarPlanejamento(specPress);
+  const termosCubPress = montarTermos(2, null, 'cubicoReduzido');
+  const betaCub = [80, 2, 3, -4, -5, -1, 3, -2]; // cúbico de verdade, com termos cúbicos grandes
+  const cheiosPress = ensPress.map((e) => ({ ...e, resposta: prever(e.codificadosPlanejados, betaCub, termosCubPress) }));
+  const anQuadPress = analisarResultados(metaPress, cheiosPress, { modelo: 'quadratico' });
+  const anCubPress = analisarResultados(metaPress, cheiosPress, { modelo: 'cubicoReduzido' });
+  ok('PRESS do quadrático (mal ajustado) é MUITO maior que o do cúbico (exato)',
+    anQuadPress.ajuste.press > 1e6 * Math.max(anCubPress.ajuste.press, 1e-300),
+    `(quad=${anQuadPress.ajuste.press}, cub=${anCubPress.ajuste.press})`);
+}
+
+// Multistart: um cúbico separável com 4 estacionários conhecidos (máximo,
+// mínimo, 2 selas) — todos devem ser encontrados e classificados localmente.
+{
+  const k = 2;
+  const termosMulti = montarTermos(k, null, 'cubicoReduzido');
+  const betaMulti = [0, 3, 3, 0, 0, 0, -1, -1]; // y = 3x1 - x1³ + 3x2 - x2³
+  const specMulti = {
+    experimento: { nome: 'Multiestacionário' }, resposta: { nome: 'R', objetivo: 'maximizar' },
+    fatores: [{ nome: 'A', min: -10, max: 10, casasDecimais: 6 }, { nome: 'B', min: -10, max: 10, casasDecimais: 6 }],
+    config: { tipoAlpha: 'rotacionavel', pontosCentrais: 3, modelo: 'cubicoReduzido' },
+  };
+  const { meta: metaMulti, ensaios: ensMulti } = criarPlanejamento(specMulti);
+  const cheiosMulti = ensMulti.map((e) => ({ ...e, resposta: prever(e.codificadosPlanejados, betaMulti, termosMulti) }));
+  const anMulti = analisarResultados(metaMulti, cheiosMulti);
+  ok('encontra os 4 estacionários (máximo, mínimo, 2 selas)', anMulti.otimo.estacionarios.length === 4, `(${anMulti.otimo.estacionarios.length})`);
+  ok('o principal é o máximo (1,1), que é o de melhor score', anMulti.otimo.estacionario?.canonica.tipo === 'maximo');
+  ok('a análise canônica no estacionário é marcada como local (grau 3)', anMulti.otimo.canonica.local === true);
+  ok('avisa sobre múltiplos estacionários', anMulti.otimo.avisos.some((a) => a.texto.includes('pontos de inclinação nula')));
+}
 
 console.log('\n— Validação de entrada —');
 const tentar = (s) => { try { criarPlanejamento(s); return null; } catch (e) { return e.erros || [e.message]; } };

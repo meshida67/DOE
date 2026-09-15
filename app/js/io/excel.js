@@ -65,7 +65,8 @@ const novoLivro = () => XLSX().utils.book_new();
 const cabecalhoFator = (f) => (f.unidade ? `${f.nome} (${f.unidade})` : f.nome);
 const cabecalhoResposta = (r) => (r.unidade ? `${r.nome} (${r.unidade})` : r.nome);
 
-const NOME_TIPO = { fatorial: 'Vértice', axial: 'Eixo', central: 'Centro (repetição)' };
+const NOME_TIPO = { fatorial: 'Vértice', axial: 'Eixo', central: 'Centro (repetição)', complementar: 'Face/aresta (curvatura em S)' };
+const NOME_MODELO = { quadratico: 'quadrático', cubicoReduzido: 'cúbico', cubicoCompleto: 'cúbico completo' };
 
 // ── 1. modelo de entrada ─────────────────────────────────────────────────
 
@@ -138,6 +139,7 @@ export function gerarModeloEntrada() {
     ['Repetições no ponto central', 3, 'Quantas vezes repetir o ensaio do meio da faixa. Serve para medir o erro do experimento. Mínimo recomendado: 3'],
     ['Tipo de planejamento', 'face', '"face" mantém todos os ensaios dentro dos seus limites. "rotacionavel" distribui melhor os ensaios. Na dúvida, deixe "face"'],
     ['Permitir ultrapassar os limites', 'não', 'Se "sim", alguns ensaios podem pedir valores um pouco além do mínimo/máximo informado'],
+    ['Grau do modelo', 'simples', '"simples" é a curva padrão. "cubico" descreve curvas em S nos mesmos ensaios — só funciona com "Tipo de planejamento" diferente de "face". "cubico completo" pede vários ensaios a mais.'],
     [],
     ['Estas opções já estão nos valores recomendados. Se você não sabe o que são, não mude.'],
   ], { larguras: [30, 14, 80] }));
@@ -236,7 +238,8 @@ export function gerarPlanilhaEnsaios(meta, ensaios, diagnostico) {
 
 export function gerarPlanilhaResultados(analise) {
   const wb = novoLivro();
-  const { meta, ajuste, anova: an, leitura, otimo, ensaios } = analise;
+  const { meta, ajuste, anova: an, leitura, otimo, ensaios, modelo } = analise;
+  const nomeModelo = NOME_MODELO[modelo] || 'quadrático';
   const fatores = meta.fatores;
   const resposta = meta.resposta;
   const un = resposta.unidade ? ` ${resposta.unidade}` : '';
@@ -331,7 +334,7 @@ export function gerarPlanilhaResultados(analise) {
 
   // Modelo ajustado
   adicionar(wb, ABAS.MODELO, criarAba([
-    ['MODELO AJUSTADO'],
+    [`MODELO AJUSTADO (${nomeModelo})`],
     ['Os coeficientes estão em escala codificada: os fatores foram colocados numa mesma'],
     ['régua (−1 a +1), então dá para comparar diretamente qual deles pesa mais.'],
     [],
@@ -341,11 +344,14 @@ export function gerarPlanilhaResultados(analise) {
       Number(c.valor.toFixed(5)),
       isFinite(c.erroPadrao) ? Number(c.erroPadrao.toFixed(5)) : '—',
       isFinite(c.pValor) ? formatarP(c.pValor) : '—',
-      c.tipo === 'intercepto' ? '—' : c.significativo ? 'sim' : 'não',
+      c.tipo === 'intercepto' || c.significativo === null ? '—' : c.significativo ? 'sim' : 'não',
     ]),
     [],
-    ['"Importante?" responde se o efeito é distinguível do ruído do experimento'],
-    [`(nível de ${((1 - ajuste.confianca) * 100).toFixed(0)}%). Termos "não" podem ser fruto do acaso.`],
+    ...(ajuste.ajusteExato
+      ? [['O modelo reproduziu os resultados exatamente (dados de um cálculo, sem erro aleatório):'],
+         ['"Importante?" não se aplica — não há ruído experimental para comparar.']]
+      : [['"Importante?" responde se o efeito é distinguível do ruído do experimento'],
+         [`(nível de ${((1 - ajuste.confianca) * 100).toFixed(0)}%). Termos "não" podem ser fruto do acaso.`]]),
   ], { larguras: [10, 34, 14, 14, 16, 12] }));
 
   // ANOVA
@@ -367,6 +373,9 @@ export function gerarPlanilhaResultados(analise) {
     [],
     ['% de variação explicada (R²)', `${(an.r2 * 100).toFixed(2)}%`],
     ['R² ajustado', `${(an.r2Ajustado * 100).toFixed(2)}%`],
+    ...(isFinite(ajuste.r2Predito) ? [
+      ['Capacidade de previsão (R² predito, PRESS)', `${(ajuste.r2Predito * 100).toFixed(2)}%`],
+    ] : []),
     ...(an.temErroPuro ? [
       ['% máxima explicável', `${(an.r2Maximo * 100).toFixed(2)}%`],
       ['Desvio padrão experimental', num(an.desvioPadraoExperimental)],

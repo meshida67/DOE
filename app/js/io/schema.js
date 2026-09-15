@@ -89,6 +89,23 @@ export function parseTipoAlpha(valor) {
   return isFinite(num) && num > 0 ? String(num) : null;
 }
 
+// Ordem de checagem importa: "cubico completo" também começa com "cubico" —
+// checar cubicoCompleto primeiro evita que ele seja lido como cubicoReduzido.
+const SINONIMOS_MODELO = [
+  ['cubicoCompleto', ['curva em s completa', 'cubico completo', 'completo']],
+  ['cubicoReduzido', ['curva em s', 'cubico', 'cubica', '3']],
+  ['quadratico', ['simples', 'quadratico', 'quadratica', '2']],
+];
+
+export function parseModelo(valor) {
+  const n = normalizar(valor);
+  if (!n) return null;
+  for (const [chave, lista] of SINONIMOS_MODELO) {
+    if (lista.some((s) => n === s || n.startsWith(s))) return chave;
+  }
+  return null;
+}
+
 /**
  * Índice da coluna cujo cabeçalho casa com algum dos rótulos aceitos.
  *
@@ -233,6 +250,14 @@ export function lerSpecDeAbas({ experimento, fatores, opcoes }) {
     if (tipo) config.tipoAlpha = tipo;
     const extrap = normalizar(buscar(mo, 'permitir ultrapassar os limites', 'extrapolar', 'ultrapassar'));
     if (extrap) config.limitMode = ['sim', 's', 'true', 'verdadeiro', '1'].includes(extrap) ? 'fatorial' : 'absoluto';
+    // Rótulo "Grau do modelo" (nunca algo começando por "tipo": o parser de
+    // tipoAlpha acima casa por prefixo e capturaria um rótulo assim se a
+    // linha "Tipo de planejamento" fosse removida da planilha).
+    const modelo = parseModelo(buscar(mo, 'grau do modelo', 'formato da curva', 'modelo'));
+    if (modelo) config.modelo = modelo;
+    else if (buscar(mo, 'grau do modelo', 'formato da curva', 'modelo') !== undefined) {
+      avisos.push('Não reconheci o valor de "Grau do modelo" — usando o padrão (curvatura simples).');
+    }
   }
 
   return {

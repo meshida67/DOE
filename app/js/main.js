@@ -29,6 +29,7 @@ const estado = {
   erros: [],
   avisos: [],
   avancadoAberto: false,
+  abaAnalise: 'superficie',
 };
 
 const app = () => document.getElementById('app');
@@ -117,6 +118,7 @@ function coletarFormulario() {
     config: {
       pontosCentrais: Number($('#cfg-centrais')?.value || CONFIG_PADRAO.pontosCentrais),
       tipoAlpha: $('#cfg-alpha')?.value || CONFIG_PADRAO.tipoAlpha,
+      modelo: $('#cfg-modelo')?.value || CONFIG_PADRAO.modelo,
     },
   };
 }
@@ -124,7 +126,7 @@ function coletarFormulario() {
 function gerarPlanejamento(spec) {
   try {
     const { meta, ensaios, diagnostico } = criarPlanejamento(spec);
-    Object.assign(estado, { meta, ensaios, diagnostico, analise: null });
+    Object.assign(estado, { meta, ensaios, diagnostico, analise: null, abaAnalise: 'superficie' });
     salvarRascunho();
     irPara('plano');
   } catch (e) {
@@ -135,14 +137,30 @@ function gerarPlanejamento(spec) {
   }
 }
 
+/** Reanalisa os ensaios já carregados com outro formato de modelo — sem regerar o planejamento. */
+function reanalisarComModelo(modelo) {
+  try {
+    estado.analise = analisarResultados(estado.meta, estado.ensaios, { modelo });
+    estado.erros = [];
+    renderizar();
+  } catch (e) {
+    mostrarErros([e.message]);
+  }
+}
+
 // ── tela: análise ────────────────────────────────────────────────────────
 
 function ligarAnalise() {
   $$('.aba').forEach((b) => b.addEventListener('click', () => {
+    estado.abaAnalise = b.dataset.aba;
     $$('.aba').forEach((x) => x.classList.remove('ativa'));
     b.classList.add('ativa');
     $$('[data-painel]').forEach((p) => p.classList.toggle('oculto', p.dataset.painel !== b.dataset.aba));
   }));
+
+  // Reanalisa os MESMOS ensaios com outro formato de modelo — não regera o
+  // planejamento (o que mudaria o sorteio e os ids), só reajusta.
+  $('#analise-modelo')?.addEventListener('change', (e) => reanalisarComModelo(e.target.value));
 
   desenharGraficos();
 
@@ -376,7 +394,7 @@ function iniciar() {
   $('#retomar')?.addEventListener('click', retomarRascunho);
   $('#recomecar')?.addEventListener('click', () => {
     localStorage.removeItem(CHAVE_RASCUNHO);
-    Object.assign(estado, { spec: null, meta: null, ensaios: null, diagnostico: null, analise: null });
+    Object.assign(estado, { spec: null, meta: null, ensaios: null, diagnostico: null, analise: null, abaAnalise: 'superficie' });
     irPara('inicio');
   });
 
