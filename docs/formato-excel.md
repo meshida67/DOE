@@ -79,24 +79,27 @@ Já vem nos valores recomendados. Quem não sabe o que é, não mexe.
 
 ### Aba `Ensaios` — a que importa
 
-| Ordem | Ensaio | Temperatura (°C) | Concentração (mol/L) | Rendimento (%) | Observações |
-|---|---|---|---|---|---|
-| 1 | E06 | 60,0 | 0,30 | | |
-| 2 | E11 | 50,0 | 0,30 | | |
-| 3 | E02 | 60,0 | 0,10 | | |
-| … | | | | | |
+| Ordem | Ensaio | Temperatura (°C) | Concentração (mol/L) | Rendimento (%) |
+|---|---|---|---|---|
+| 1 | E06 | 60,0 | 0,30 | |
+| 2 | E11 | 50,0 | 0,30 | |
+| 3 | E02 | 60,0 | 0,10 | |
+| … | | | | |
 
 - Ordenada por **Ordem** — a ordem de execução sorteada, não a ordem lógica.
 - A coluna da resposta vem **vazia**: é a única que o grupo preenche.
 - O cabeçalho traz o nome do fator com a unidade entre parênteses; a leitura
   ignora a parte entre parênteses ao casar as colunas.
 
-Três coisas que o grupo pode fazer e a ferramenta entende:
+Duas coisas que o grupo pode fazer e a ferramenta entende:
 
 1. **Deixar um resultado em branco** — o ensaio é ignorado na análise, com aviso.
 2. **Corrigir o valor de um fator** — se usou 45,2 °C onde o plano pedia 45,0,
    basta corrigir na planilha; a análise usa o que foi realmente feito.
-3. **Anotar qualquer coisa em Observações** — a coluna não é lida.
+
+A planilha gerada não tem mais coluna `Observações`. Planilhas antigas que a
+tenham continuam sendo lidas — a coluna é aceita e ignorada (`acharColuna` em
+`io/schema.js`), então nada quebra ao enviar um arquivo gerado antes.
 
 ### Aba `Instruções`
 O que fazer agora, incluindo por que a ordem está embaralhada e por que os

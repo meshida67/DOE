@@ -397,17 +397,17 @@ export function plotarSuperficie(container, analise, opcoes = {}) {
 export function plotarEfeitos(container, analise) {
   const T = tokens(container);
   const coefs = analise.ajuste.coeficientes.filter((c) => c.tipo !== 'intercepto');
-  const W = 780;
+  const W = 960;
   const linhaAltura = 34;
   // Faixa de rótulos larga: com 3 ou 4 fatores as descrições ficam longas
   // ("Interação Temperatura × Concentração"), e truncar cedo demais apaga
   // justamente a informação que distingue uma linha da outra.
-  const Topo = 34, B = 46, L = 258, R = 34;
+  const Topo = 34, B = 64, L = 300, R = 40;
   const H = Topo + coefs.length * linhaAltura + B;
 
   const svg = moldura(container, {
     largura: W, altura: H,
-    titulo: 'Efeito de cada fator',
+    titulo: 'Efeito de cada variável',
     descricao: 'Barras à direita aumentam a resposta, à esquerda diminuem. A linha fina é a incerteza; quem cruza o zero não é conclusivo.',
   });
   const tip = tooltip(container);
@@ -435,7 +435,7 @@ export function plotarEfeitos(container, analise) {
     const larg = Math.abs(px(c.valor) - px(0));
 
     const rot = el('text', { x: L - 14, y, 'text-anchor': 'end', 'dominant-baseline': 'middle', 'font-size': 12.5, fill: T.textSecondary }, svg);
-    rot.textContent = c.descricao.length > 36 ? `${c.descricao.slice(0, 35)}…` : c.descricao;
+    rot.textContent = c.descricao.length > 44 ? `${c.descricao.slice(0, 43)}…` : c.descricao;
 
     // Extremidade arredondada do lado do dado, reta no zero.
     const r = Math.min(4, larg);

@@ -12,6 +12,7 @@
  */
 
 import { formatarP } from '../core/anova.js';
+import { resolverAlpha, numeroParametros, MIN_FATORES, MAX_FATORES } from '../core/design.js';
 
 export const esc = (s) => String(s ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -34,6 +35,29 @@ const casasPorIncerteza = (erroPadrao) => {
   if (!isFinite(erroPadrao) || erroPadrao <= 0) return 2;
   return Math.max(0, Math.min(4, Math.ceil(-Math.log10(erroPadrao)) + 1));
 };
+
+/** Ícones de traço (24×24), herdam a cor do texto via `currentColor`. */
+const TRACOS = {
+  frasco: 'M9 3h6M10 3v6l-5.5 9.5A1.7 1.7 0 0 0 6 21h12a1.7 1.7 0 0 0 1.5-2.5L14 9V3M7.5 15h9',
+  enviar: 'M12 16V4M7 9l5-5 5 5M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3',
+  baixar: 'M12 4v12M7 11l5 5 5-5M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3',
+  seta: 'M5 12h14M13 6l6 6-6 6',
+  lista: 'M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01',
+  grafico: 'M3 3v18h18M7 15l4-4 3 3 5-6',
+  alvo: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM12 12h.01',
+  estrela: 'M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z',
+  pulso: 'M3 12h4l3-8 4 16 3-8h4',
+  mapa: 'M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3zM9 3v15M15 6v15',
+  camadas: 'M12 3 3 8l9 5 9-5zM3 13l9 5 9-5',
+  info: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 11v5M12 8h.01',
+  escudo: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',
+  relogio: 'M12 7v5l3 2M21 12a9 9 0 1 1-9-9 9 9 0 0 1 9 9',
+  barras: 'M4 6h10M4 12h16M4 18h7',
+  dispersao: 'M3 3v18h18M8 15h.01M12 10h.01M16 13h.01M18 7h.01',
+};
+
+export const icone = (nome) =>
+  `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="${TRACOS[nome] || ''}"/></svg>`;
 
 const ICONES = { erro: '✕', atencao: '!', aviso: '!', bom: '✓', info: 'i', neutro: 'i', ruim: '✕' };
 const CLASSES = { erro: 'erro', atencao: 'atencao', aviso: 'atencao', bom: 'bom', info: 'info', neutro: 'info', ruim: 'erro' };
@@ -71,53 +95,211 @@ export function passos(atual) {
 
 // ── tela inicial ─────────────────────────────────────────────────────────
 
-export function telaInicio() {
+/**
+ * @param {object|null} rascunho  o que `main.js` guardou no navegador
+ *   ({ salvoEm, meta, ensaios, temAnalise }), ou null se não houver nada.
+ */
+export function telaInicio(rascunho = null) {
+  const etapas = [
+    ['Descrever', 'O que você controla e o que vai medir.'],
+    ['Receber os ensaios', 'Uma planilha com a ordem de execução.'],
+    ['Medir', 'Realize os ensaios e anote cada resultado.'],
+    ['Ver o resultado', 'A melhor condição e os gráficos.'],
+  ];
+
+  const painelRascunho = rascunho
+    ? (() => {
+      const m = rascunho.meta;
+      const total = rascunho.ensaios.length;
+      const medidos = rascunho.ensaios.filter((e) => e.resposta !== null && e.resposta !== undefined && e.resposta !== '').length;
+      return `
+      <section class="painel">
+        <div class="painel-cab"><span class="painel-rotulo">${icone('relogio')}Experimento em andamento</span></div>
+        <h2 style="margin-bottom:.8rem">${esc(m.experimento?.nome || 'Sem nome')}</h2>
+        <ul class="lista-info">
+          <li><span>Mede</span><span>${esc(m.resposta?.nome || '—')}</span></li>
+          <li><span>Condições</span><span>${esc(m.fatores.map((x) => x.nome).join(', '))}</span></li>
+          <li><span>Ensaios com resultado</span><span>${medidos} de ${total}</span></li>
+          <li><span>Salvo em</span><span>${esc(new Date(rascunho.salvoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }))}</span></li>
+        </ul>
+        <div class="acoes"><button class="btn btn-primario btn-bloco" data-retomar>Continuar de onde parei ${icone('seta')}</button></div>
+      </section>`;
+    })()
+    : `
+      <section class="painel">
+        <div class="painel-cab"><span class="painel-rotulo">${icone('relogio')}Experimento em andamento</span></div>
+        <p class="secundario pequeno" style="margin:0">
+          Nenhum por enquanto. Quando você gerar um planejamento, ele fica guardado neste navegador
+          e aparece aqui para continuar depois.
+        </p>
+      </section>`;
+
   return `
-  <div class="cartao" style="text-align:center;padding:2.5rem 1.5rem">
-    <h1>Planejamento e otimização de experimentos</h1>
-    <p class="secundario" style="max-width:62ch;margin:0 auto 0">
-      Diga quais condições você consegue controlar e o que quer medir. A ferramenta monta a
-      lista de ensaios, e depois dos experimentos encontra a melhor condição para você.
-      Não é preciso saber estatística.
-    </p>
+  <header class="cabecalho-pagina">
+    <div>
+      <h1>Planejamento de experimentos</h1>
+      <p>Me diga o que você controla no laboratório e o que quer medir. Eu monto os ensaios e, quando você trouxer os resultados, encontro a melhor combinação. Não precisa saber estatística.</p>
+    </div>
+    <div class="cabecalho-acoes">
+      <button class="btn" data-baixar-modelo>${icone('baixar')}Modelo de Excel</button>
+      <button class="btn btn-primario" data-ir="definir">Novo experimento</button>
+    </div>
+  </header>
+
+  <div class="kpis" aria-label="Como funciona">
+    ${etapas.map(([titulo, texto], i) => `
+    <div class="kpi">
+      <div class="kpi-rotulo"><span class="etapa-num">${i + 1}</span>Etapa ${i + 1}</div>
+      <div class="etapa-titulo">${titulo}</div>
+      <div class="kpi-nota">${texto}</div>
+    </div>`).join('')}
   </div>
 
-  <div class="escolhas">
-    <button class="escolha" data-ir="definir">
-      <span class="ico" aria-hidden="true">🧪</span>
-      <h3>Começar um experimento novo</h3>
-      <p>Você informa o que quer estudar e recebe uma planilha com os ensaios a realizar.</p>
-    </button>
-    <button class="escolha" data-abrir-arquivo="analise">
-      <span class="ico" aria-hidden="true">📊</span>
-      <h3>Já fiz os ensaios</h3>
-      <p>Envie a planilha preenchida com os resultados e receba a condição ótima e os gráficos.</p>
-    </button>
-  </div>
+  <div class="dash-grade">
+    <section class="painel">
+      <div class="painel-cab">
+        <h2>Por onde começar</h2>
+      </div>
+      <div class="acoes-inicio">
+        <button class="acao" data-ir="definir">
+          <span class="acao-ico">${icone('frasco')}</span>
+          <h3>Começar um experimento novo</h3>
+          <p>Você me manda as variáveis e os limites de cada uma, e eu devolvo a lista de ensaios na ordem de fazer.</p>
+          <span class="acao-link">Descrever experimento ${icone('seta')}</span>
+        </button>
+        <button class="acao acao-solta" data-abrir-arquivo="analise">
+          <span class="acao-ico">${icone('enviar')}</span>
+          <h3>Já fiz os ensaios</h3>
+          <p>Você me manda a planilha com os resultados anotados, e eu devolvo a melhor combinação e os gráficos. Também vale arrastar o arquivo para a página.</p>
+          <span class="acao-link">Escolher planilha ${icone('seta')}</span>
+        </button>
+      </div>
+    </section>
 
-  <div class="cartao" style="margin-top:1.25rem">
-    <h3>Prefere trabalhar pelo Excel?</h3>
-    <p class="secundario pequeno" style="margin-bottom:1rem">
-      Baixe o modelo, preencha com calma no seu computador e envie de volta aqui.
-      É o mesmo fluxo — só muda onde você digita.
-    </p>
-    <div class="acoes" style="margin-top:0">
-      <button class="btn" data-baixar-modelo>⬇ Baixar modelo de Excel</button>
-      <button class="btn btn-fantasma" data-abrir-arquivo="qualquer">Enviar uma planilha</button>
+    <div class="coluna">
+      ${painelRascunho}
+      <section class="painel">
+        <div class="painel-cab"><span class="painel-rotulo">${icone('lista')}Prefere o Excel?</span></div>
+        <p class="secundario pequeno">Baixe o modelo, preencha com calma e envie de volta. É o mesmo caminho — só muda onde você digita.</p>
+        <div class="acoes" style="margin-top:.4rem">
+          <button class="btn btn-pequeno" data-baixar-modelo>${icone('baixar')}Baixar modelo</button>
+          <button class="btn btn-fantasma btn-pequeno" data-abrir-arquivo="qualquer">Enviar planilha</button>
+        </div>
+      </section>
+      <section class="painel">
+        <div class="painel-cab"><span class="painel-rotulo">${icone('escudo')}Seus dados ficam com você</span></div>
+        <p class="secundario pequeno" style="margin:0">Todos os cálculos rodam neste navegador. Nenhuma planilha é enviada para servidor algum.</p>
+      </section>
     </div>
   </div>`;
 }
 
 // ── tela de definição ────────────────────────────────────────────────────
 
+const OPCOES_DISTRIBUICAO = [
+  ['face', 'Dentro dos meus limites', 'Ensaios nos cantos, no meio de cada lado e no centro. A mais simples de executar.'],
+  ['rotacionavel', 'Distribuição mais uniforme', 'Todos os ensaios à mesma distância do centro: a previsão é igualmente confiável em qualquer direção.'],
+  ['ortogonal', 'Efeitos mais independentes', 'Posiciona os ensaios dos eixos para que o efeito de uma variável não se misture com o das outras.'],
+];
+
+/**
+ * Desenho ilustrativo (2 variáveis) de onde caem os ensaios de cada
+ * distribuição. Os limites informados são a caixa clara; como o ensaio mais
+ * extremo sempre cai sobre o limite, com distribuições além da "face" os
+ * cantos recuam para dentro e surge o quadrado girado dos eixos.
+ */
+export function desenhoDistribuicao(tipo, pontosCentrais = 3) {
+  let alpha = 1;
+  try { alpha = resolverAlpha(tipo, 2, Math.max(1, Number(pontosCentrais) || 1)); } catch { /* mantém 1 */ }
+  const T = 132, m = 16, meio = T / 2, raio = meio - m;
+  const u = raio / Math.max(alpha, 1);
+  const c = u;             // canto (±1)
+  const e = alpha * u;     // eixo (±α), no limite
+  const girado = alpha > 1 + 1e-9;
+  const p = (x, y, cls) => `<circle cx="${meio + x}" cy="${meio - y}" r="4.5" class="${cls}"/>`;
+  return `<svg viewBox="0 0 ${T} ${T}" role="img" aria-label="Posição ilustrativa dos ensaios">
+    <rect x="${m}" y="${m}" width="${2 * raio}" height="${2 * raio}" rx="3" class="dist-limite"/>
+    ${tipo === 'rotacionavel' ? `<circle cx="${meio}" cy="${meio}" r="${e}" class="dist-circulo"/>` : ''}
+    <rect x="${meio - c}" y="${meio - c}" width="${2 * c}" height="${2 * c}" class="dist-quadrado"/>
+    ${girado ? `<polygon points="${meio},${meio - e} ${meio + e},${meio} ${meio},${meio + e} ${meio - e},${meio}" class="dist-girado"/>` : ''}
+    ${[[-c, -c], [c, -c], [-c, c], [c, c]].map(([x, y]) => p(x, y, 'dist-p-canto')).join('')}
+    ${[[-e, 0], [e, 0], [0, -e], [0, e]].map(([x, y]) => p(x, y, 'dist-p-eixo')).join('')}
+    ${p(0, 0, 'dist-p-centro')}
+  </svg>`;
+}
+
 const linhaFator = (f = {}, i = 0, removivel = true) => `
   <tr data-linha-fator="${i}">
-    <td><input type="text" data-campo="nome" value="${esc(f.nome || '')}" placeholder="Ex.: Temperatura" aria-label="Nome do fator ${i + 1}"></td>
-    <td><input type="text" data-campo="unidade" value="${esc(f.unidade || '')}" placeholder="°C" aria-label="Unidade do fator ${i + 1}"></td>
-    <td><input type="number" step="any" data-campo="min" value="${f.min ?? ''}" placeholder="40" aria-label="Menor valor do fator ${i + 1}"></td>
-    <td><input type="number" step="any" data-campo="max" value="${f.max ?? ''}" placeholder="60" aria-label="Maior valor do fator ${i + 1}"></td>
-    <td>${removivel ? `<button class="btn btn-fantasma btn-pequeno" data-remover-fator="${i}" aria-label="Remover fator ${i + 1}">✕</button>` : ''}</td>
+    <td><input type="text" data-campo="nome" value="${esc(f.nome || '')}" placeholder="Ex.: Temperatura" aria-label="Nome da variável ${i + 1}"></td>
+    <td><input type="text" data-campo="unidade" value="${esc(f.unidade || '')}" placeholder="°C" aria-label="Unidade da variável ${i + 1}"></td>
+    <td><input type="number" step="any" data-campo="min" value="${f.min ?? ''}" placeholder="40" aria-label="Menor valor da variável ${i + 1}"></td>
+    <td><input type="number" step="any" data-campo="max" value="${f.max ?? ''}" placeholder="60" aria-label="Maior valor da variável ${i + 1}"></td>
+    <td>${removivel ? `<button class="btn btn-fantasma btn-pequeno" data-remover-fator="${i}" aria-label="Remover variável ${i + 1}">✕</button>` : ''}</td>
   </tr>`;
+
+const OPCOES_MODELO = [
+  ['quadratico', 'Curvatura simples', 'Cada variável tem uma subida e uma descida, com um único pico. Serve para quase todo experimento.',
+    'M14,64 Q75,6 136,64'],
+  ['cubicoReduzido', 'Curvatura em S', 'A resposta pode subir e depois estabilizar, ou mudar de sentido dentro da faixa. Não pede nenhum ensaio a mais.',
+    'M14,66 C44,66 46,20 75,20 C104,20 106,46 136,10'],
+  ['cubicoCompleto', 'Curvatura em S completa', 'Além do S, o formato da curva de uma variável pode mudar conforme o valor da outra.',
+    'M14,66 C44,66 46,20 75,20 C104,20 106,46 136,10'],
+];
+
+/**
+ * Cartões do formato da curva, com o desenho da forma que cada um consegue
+ * descrever e a conta de ensaios/coeficientes para o planejamento atual.
+ * Recalculado fora do `telaDefinir` porque o número de variáveis e as
+ * repetições do centro mudam esses números enquanto a pessoa digita.
+ */
+export function cartoesModelo({ k = 2, pontosCentrais = 3, tipoAlpha = 'face', modelo = 'quadratico' } = {}) {
+  const kk = Math.min(MAX_FATORES, Math.max(MIN_FATORES, Number(k) || 2));
+  const nc = Math.max(1, Number(pontosCentrais) || 1);
+  let alpha = 1;
+  try { alpha = resolverAlpha(tipoAlpha, kk, nc); } catch { /* mantém 1 */ }
+
+  return OPCOES_MODELO.map(([valor, titulo, texto, curva]) => {
+    const extras = valor === 'cubicoCompleto' ? Math.pow(3, kk) - Math.pow(2, kk) - 1 : 0;
+    const N = Math.pow(2, kk) + 2 * kk + nc + extras;
+    const p = numeroParametros(kk, valor);
+    const folga = N - p;
+
+    let impedimento = '';
+    if (valor !== 'quadratico' && alpha <= 1 + 1e-9) {
+      impedimento = 'Precisa de outra distribuição acima — com os ensaios só nas faces, o S não pode ser calculado.';
+    } else if (valor === 'cubicoCompleto' && tipoAlpha === 'ortogonal') {
+      impedimento = 'Não funciona com "Efeitos mais independentes".';
+    } else if (valor === 'cubicoCompleto' && kk > 3) {
+      impedimento = `Com ${kk} variáveis seriam ${extras} ensaios extras — inviável.`;
+    } else if (folga < 0) {
+      impedimento = 'Ensaios de menos para esse tanto de coeficiente.';
+    } else if (folga === 0) {
+      impedimento = 'Nenhum ensaio livre: o modelo acerta tudo por construção, mesmo estando errado.';
+    }
+
+    return `
+    <label class="dist-opcao${impedimento ? ' dist-impedida' : ''}">
+      <input type="radio" name="cfg-modelo" value="${valor}" ${modelo === valor ? 'checked' : ''}>
+      <span class="dist-desenho">
+        <svg viewBox="0 0 150 80" role="img" aria-label="Formato de curva que este modelo descreve">
+          <line x1="14" y1="70" x2="136" y2="70" class="curva-eixo"/>
+          <line x1="14" y1="70" x2="14" y2="8" class="curva-eixo"/>
+          ${valor === 'cubicoCompleto' ? '<path d="M14,52 C44,52 46,68 75,68 C104,68 106,40 136,44" class="curva-2"/>' : ''}
+          <path d="${curva}" class="curva-1"/>
+        </svg>
+      </span>
+      <span class="dist-titulo">${titulo}</span>
+      <span class="dist-texto">${texto}</span>
+      <span class="dist-numeros">
+        <span class="pilula">${N} ensaios</span>
+        <span class="pilula">${p} coeficientes</span>
+        <span class="pilula${folga < 2 ? ' pilula-atencao' : ''}">${folga === 1 ? '1 livre' : `${folga} livres`}</span>
+      </span>
+      ${extras ? `<span class="dist-extra">${extras} ensaios a mais que os outros dois formatos.</span>` : ''}
+      ${impedimento ? `<span class="dist-aviso">${impedimento}</span>` : ''}
+    </label>`;
+  }).join('');
+}
 
 export function telaDefinir(estado) {
   const s = estado.spec || {};
@@ -173,7 +355,7 @@ export function telaDefinir(estado) {
   <div class="cartao">
     <div class="cartao-titulo"><h2>2. O que você consegue controlar?</h2></div>
     <p class="secundario pequeno">
-      Liste de 2 a 4 condições que você ajusta no laboratório e, para cada uma, a menor e a maior
+      Liste de 2 a 4 variáveis que você ajusta no laboratório e, para cada uma, a menor e a maior
       que consegue usar na prática. <strong>Os ensaios vão cobrir toda essa faixa</strong>, então
       informe limites que sejam seguros e executáveis.
     </p>
@@ -184,7 +366,7 @@ export function telaDefinir(estado) {
       </tbody>
     </table>
     <div class="acoes" style="margin-top:.9rem">
-      <button class="btn btn-pequeno" id="add-fator">+ Adicionar outra condição</button>
+      <button class="btn btn-pequeno" id="add-fator">+ Adicionar outra variável</button>
     </div>
 
     <details class="avancado" ${estado.avancadoAberto ? 'open' : ''}>
@@ -195,24 +377,33 @@ export function telaDefinir(estado) {
           <input type="number" min="1" max="10" id="cfg-centrais" value="${cfg.pontosCentrais ?? 3}">
           <div class="ajuda">Repetir o ensaio do meio da faixa é o que permite medir o erro do próprio experimento. Recomendado: 3.</div>
         </div>
-        <div class="campo">
-          <label for="cfg-alpha">Como distribuir os ensaios</label>
-          <select id="cfg-alpha">
-            <option value="face" ${(cfg.tipoAlpha ?? 'face') === 'face' ? 'selected' : ''}>Dentro dos meus limites (recomendado)</option>
-            <option value="rotacionavel" ${cfg.tipoAlpha === 'rotacionavel' ? 'selected' : ''}>Distribuição mais uniforme</option>
-            <option value="ortogonal" ${cfg.tipoAlpha === 'ortogonal' ? 'selected' : ''}>Efeitos mais independentes</option>
-          </select>
-          <div class="ajuda">Todas as opções respeitam os limites informados. Na dúvida, deixe a primeira.</div>
-        </div>
-        <div class="campo">
-          <label for="cfg-modelo">Formato da curva</label>
-          <select id="cfg-modelo">
-            <option value="quadratico" ${(cfg.modelo ?? 'quadratico') === 'quadratico' ? 'selected' : ''}>Curvatura simples (recomendado)</option>
-            <option value="cubicoReduzido" ${cfg.modelo === 'cubicoReduzido' ? 'selected' : ''}>Curvatura em S — mesmos ensaios</option>
-            <option value="cubicoCompleto" ${cfg.modelo === 'cubicoCompleto' ? 'selected' : ''}>Curvatura em S completa — exige mais ensaios</option>
-          </select>
-          <div class="ajuda">Use "curvatura em S" se a resposta muda de comportamento dentro da faixa testada (por exemplo, sobe e depois estabiliza) e a curvatura simples não descreveu bem os resultados. A opção do meio não pede nenhum ensaio a mais; a completa pede vários. Exige "Distribuição mais uniforme" ou "Efeitos mais independentes" acima.</div>
-        </div>
+        <fieldset class="campo campo-largo distribuicao">
+          <legend>Como distribuir os ensaios</legend>
+          <div class="dist-opcoes">
+            ${OPCOES_DISTRIBUICAO.map(([valor, titulo, texto]) => `
+            <label class="dist-opcao">
+              <input type="radio" name="cfg-alpha" value="${valor}" ${(cfg.tipoAlpha ?? 'face') === valor ? 'checked' : ''}>
+              <span class="dist-desenho" data-desenho="${valor}">${desenhoDistribuicao(valor, cfg.pontosCentrais ?? 3)}</span>
+              <span class="dist-titulo">${titulo}</span>
+              <span class="dist-texto">${texto}</span>
+            </label>`).join('')}
+          </div>
+          <div class="dist-legenda" aria-hidden="true">
+            <span><i class="dist-l-limite"></i>Seus limites</span>
+            <span><i class="dist-l-canto"></i>Cantos</span>
+            <span><i class="dist-l-eixo"></i>Eixos</span>
+            <span><i class="dist-l-centro"></i>Centro</span>
+          </div>
+          <div class="ajuda">Desenho ilustrativo com 2 variáveis. Todas as opções respeitam os limites informados. Na dúvida, deixe a primeira.</div>
+        </fieldset>
+        <fieldset class="campo campo-largo distribuicao">
+          <legend>Formato da curva</legend>
+          <div class="dist-opcoes" id="cartoes-modelo">${cartoesModelo({
+            k: fatores.length, pontosCentrais: cfg.pontosCentrais ?? 3,
+            tipoAlpha: cfg.tipoAlpha ?? 'face', modelo: cfg.modelo ?? 'quadratico',
+          })}</div>
+          <div class="ajuda">Cada coeficiente compromete um ensaio para ser calculado. Os <strong>ensaios livres</strong> são os que sobram, e é neles que se vê se o modelo está errado: com zero livre, a curva passa por cima de todos os pontos e acerta 100% até com dados sem sentido. Na dúvida, deixe a primeira opção.</div>
+        </fieldset>
       </div>
     </details>
   </div>
@@ -238,19 +429,19 @@ export function telaPlano(estado) {
     <div class="destaque-rotulo">Seu planejamento está pronto</div>
     <div class="heroi">${diagnostico.totalEnsaios}<span class="un">ensaios</span></div>
     <div class="heroi-nota">
-      Para estudar ${f.length} condições e encontrar a melhor combinação de
+      Para estudar ${f.length} variáveis e encontrar a melhor combinação de
       <strong>${esc(meta.resposta.nome)}</strong>, realize os ensaios abaixo
       <strong>na ordem indicada</strong>.
     </div>
     <div class="acoes">
       <button class="btn btn-primario" data-baixar-ensaios>⬇ Baixar planilha dos ensaios</button>
-      <button class="btn btn-fantasma" data-ir="definir">← Ajustar o experimento</button>
+      <button class="btn btn-fantasma" data-ir="definir">← Voltar às configurações</button>
     </div>
   </div>
 
   ${(diagnostico.avisos || []).map((a) => caixaAviso(a.nivel, a.texto)).join('')}
 
-  ${caixaAviso('info', 'A ordem está embaralhada de propósito: executar em ordem sorteada evita que variações ao longo do dia (temperatura da sala, reagente envelhecendo) sejam confundidas com o efeito das condições estudadas.')}
+  ${caixaAviso('info', 'A ordem está embaralhada de propósito: executar em ordem sorteada evita que variações ao longo do dia (temperatura da sala, reagente envelhecendo) sejam confundidas com o efeito das variáveis estudadas.')}
 
   <div class="cartao">
     <div class="cartao-titulo"><h2>Ensaios a realizar</h2></div>
@@ -271,10 +462,6 @@ export function telaPlano(estado) {
         </tbody>
       </table>
     </div>
-    <p class="legenda-grafico">
-      Os ensaios marcados como <strong>Centro (repetição)</strong> usam os mesmos valores de propósito.
-      Faça todos — são eles que medem a precisão do seu experimento.
-    </p>
   </div>
 
   <div class="cartao">
@@ -309,6 +496,16 @@ function tabelaAnovaHTML(a) {
   </table></div>`;
 }
 
+const NOME_MODELO = { quadratico: 'curvatura simples', cubicoReduzido: 'curvatura em S', cubicoCompleto: 'curvatura em S completa' };
+
+/** Leitura da capacidade de previsão em palavras + classe de pílula. */
+function leituraPrevisao(r2Predito) {
+  if (!isFinite(r2Predito)) return { texto: 'não calculável', classe: '' };
+  if (r2Predito >= 0.7) return { texto: 'boa', classe: 'pilula-bom' };
+  if (r2Predito >= 0) return { texto: 'fraca', classe: 'pilula-atencao' };
+  return { texto: 'pior que a média', classe: 'pilula-ruim' };
+}
+
 export function telaAnalise(estado) {
   const an = estado.analise;
   const { meta, anova: a, leitura, otimo, ensaios, ajuste } = an;
@@ -321,57 +518,84 @@ export function telaAnalise(estado) {
     r.objetivo === 'minimizar' ? x.resposta - y.resposta
       : r.objetivo === 'alvo' ? Math.abs(x.resposta - r.alvo) - Math.abs(y.resposta - r.alvo)
       : y.resposta - x.resposta)[0];
-  const ganho = otimo.recomendado.previsto - melhorFeito.resposta;
+  const previsto = otimo.recomendado.previsto;
+  // "Ganho" no sentido do objetivo: positivo sempre significa "melhor que o melhor ensaio".
+  const ganho = r.objetivo === 'minimizar' ? melhorFeito.resposta - previsto
+    : r.objetivo === 'alvo' ? Math.abs(melhorFeito.resposta - r.alvo) - Math.abs(previsto - r.alvo)
+    : previsto - melhorFeito.resposta;
   const casasResposta = casasPorIncerteza(otimo.recomendado.erroPadrao);
+  const un = r.unidade ? ` ${esc(r.unidade)}` : '';
 
   const nomeTipo = { fatorial: 'Vértice', axial: 'Eixo', central: 'Centro', complementar: 'Face/aresta', desconhecido: '—' };
   const tipoSuperficie = { maximo: 'Pico bem definido', minimo: 'Vale bem definido', sela: 'Ponto de sela', cume: 'Cume alongado' };
+  const prev = leituraPrevisao(ajuste.r2Predito);
+  const aba = ['ensaios', 'anova', 'tecnico'].includes(estado.abaAnalise) ? estado.abaAnalise : 'ensaios';
+
+  const mensagens = [
+    ...leitura.mensagens.map((m) => caixaAviso(m.nivel, m.texto)),
+    ...otimo.avisos.map((x) => caixaAviso(x.nivel, x.texto)),
+    ...(an.ignorados > 0 ? [caixaAviso('info', `${an.ignorados} ensaio(s) sem resultado foram desconsiderados.`)] : []),
+  ];
 
   return `
-  ${passos('analise')}
-
-  <div class="destaque">
-    <div class="destaque-rotulo">Condição recomendada — para obter ${esc(objetivo)} de ${esc(r.nome)}</div>
-    <div class="heroi">${numBR(otimo.recomendado.previsto, casasResposta)}${unidade(r.unidade)}</div>
-    <div class="heroi-nota">
-      ${esc(r.nome)} previsto nessa condição${isFinite(otimo.recomendado.erroPadrao)
-        ? `, com margem aproximada de <strong>± ${numBR(2 * otimo.recomendado.erroPadrao, casasResposta)}</strong>`
-        : ''}.
-      ${isFinite(ganho) && ganho > 0 ? `São <strong>${numBR(ganho, casasResposta)}${r.unidade ? ` ${esc(r.unidade)}` : ''}</strong> a mais que o melhor ensaio já realizado.` : ''}
+  <header class="cabecalho-pagina">
+    <div>
+      <h1>Resultado</h1>
+      <p>${esc(meta.experimento?.nome || 'Experimento')} · ${ensaios.length} ensaios analisados · objetivo: ${esc(objetivo)} de ${esc(r.nome)}</p>
     </div>
-    <div class="receita">
-      ${f.map((x, j) => `<div class="receita-item">
-        <div class="nome">${esc(x.nome)}</div>
-        <div class="valor">${numBR(otimo.recomendado.reais[j], x.casasDecimais ?? 2)}${unidade(x.unidade)}</div>
-      </div>`).join('')}
-    </div>
-    <div class="acoes">
-      <button class="btn btn-primario" data-baixar-resultados>⬇ Baixar planilha de resultados</button>
-      <button class="btn" data-baixar-latex>⬇ Tabelas em LaTeX</button>
+    <div class="cabecalho-acoes">
       <button class="btn btn-fantasma" data-ir="inicio">Novo experimento</button>
+      <button class="btn" data-baixar-latex>${icone('baixar')}Tabelas em LaTeX</button>
+      <button class="btn btn-primario" data-baixar-resultados>${icone('baixar')}Baixar resultados</button>
+    </div>
+  </header>
+
+  <div class="kpis">
+    <div class="kpi">
+      <div class="kpi-rotulo">${icone('alvo')}${esc(r.nome)} previsto</div>
+      <div class="kpi-linha">
+        <span class="kpi-valor">${numBR(previsto, casasResposta)}${unidade(r.unidade)}</span>
+        ${isFinite(otimo.recomendado.erroPadrao) ? `<span class="pilula">± ${numBR(2 * otimo.recomendado.erroPadrao, casasResposta)}</span>` : ''}
+      </div>
+      <div class="kpi-nota">na condição recomendada</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-rotulo">${icone('estrela')}Melhor ensaio realizado</div>
+      <div class="kpi-linha">
+        <span class="kpi-valor">${numBR(melhorFeito.resposta)}${unidade(r.unidade)}</span>
+        ${isFinite(ganho) && ganho > 0 ? `<span class="pilula pilula-bom">↗ ${numBR(ganho, casasResposta)}</span>` : ''}
+      </div>
+      <div class="kpi-nota">${esc(melhorFeito.id)}${isFinite(ganho) && ganho > 0 ? ` · a recomendação rende ${numBR(ganho, casasResposta)}${un} a mais` : ''}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-rotulo">${icone('pulso')}Variação explicada</div>
+      <div class="kpi-linha">
+        <span class="kpi-valor">${numBR(a.r2 * 100, 1)}<span class="un">%</span></span>
+      </div>
+      <div class="kpi-nota">${isFinite(a.r2Ajustado) ? `${numBR(a.r2Ajustado * 100, 1)}% descontando o nº de coeficientes` : 'dos resultados medidos'}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-rotulo">${icone('camadas')}Capacidade de previsão</div>
+      <div class="kpi-linha">
+        <span class="kpi-valor">${isFinite(ajuste.r2Predito) ? `${numBR(ajuste.r2Predito * 100, 1)}<span class="un">%</span>` : '—'}</span>
+        <span class="pilula ${prev.classe}">${prev.texto}</span>
+      </div>
+      <div class="kpi-nota">em ensaios que o modelo não viu</div>
     </div>
   </div>
 
-  ${leitura.mensagens.map((m) => caixaAviso(m.nivel, m.texto)).join('')}
-  ${otimo.avisos.map((x) => caixaAviso(x.nivel, x.texto)).join('')}
-  ${an.ignorados > 0 ? caixaAviso('info', `${an.ignorados} ensaio(s) sem resultado foram desconsiderados.`) : ''}
-
-  <div class="abas" role="tablist">
-    <button class="aba${estado.abaAnalise === 'superficie' ? ' ativa' : ''}" data-aba="superficie" role="tab">Mapa do experimento</button>
-    <button class="aba${estado.abaAnalise === 'efeitos' ? ' ativa' : ''}" data-aba="efeitos" role="tab">O que mais influencia</button>
-    <button class="aba${estado.abaAnalise === 'qualidade' ? ' ativa' : ''}" data-aba="qualidade" role="tab">Confiabilidade</button>
-    <button class="aba${estado.abaAnalise === 'ensaios' ? ' ativa' : ''}" data-aba="ensaios" role="tab">Seus ensaios</button>
-    <button class="aba${estado.abaAnalise === 'tecnico' ? ' ativa' : ''}" data-aba="tecnico" role="tab">Detalhes técnicos</button>
-  </div>
-
-  <section data-painel="superficie"${estado.abaAnalise !== 'superficie' ? ' class="oculto"' : ''}>
-    <div class="cartao">
-      <div class="cartao-titulo"><h2>Mapa do experimento</h2></div>
-      <p class="secundario pequeno">
-        As cores mostram o valor previsto de ${esc(r.nome)} em cada combinação. Os círculos são os
-        ensaios que você fez; o círculo laranja marca a condição recomendada.
-        Passe o cursor sobre o mapa para ler qualquer ponto.
-      </p>
+  <div class="dash-grade">
+    <section class="painel">
+      <div class="painel-cab">
+        <div>
+          <span class="painel-rotulo">${icone('mapa')}Mapa do experimento</span>
+          <h2 style="margin-top:.25rem">${esc(r.nome)} previsto em cada combinação</h2>
+        </div>
+        <div class="painel-extra legenda-marcas">
+          <span><i class="marca-ponto"></i>Seus ensaios</span>
+          <span><i class="marca-otimo"></i>Condição recomendada</span>
+        </div>
+      </div>
       ${f.length > 2 ? `<div class="viz-controles">
         <div class="campo"><label for="eixo-x">Eixo horizontal</label>
           <select id="eixo-x">${f.map((x, j) => `<option value="${j}" ${j === 0 ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select></div>
@@ -380,69 +604,97 @@ export function telaAnalise(estado) {
         <div class="campo" style="flex:1"><div class="ajuda" id="nota-fixos"></div></div>
       </div>` : ''}
       <div class="grafico-rolagem"><div id="graf-superficie"></div></div>
-    </div>
-  </section>
+      <p class="legenda-grafico" style="margin-bottom:0">Passe o cursor sobre o mapa para ler o valor previsto em qualquer ponto.</p>
+    </section>
 
-  <section data-painel="efeitos"${estado.abaAnalise !== 'efeitos' ? ' class="oculto"' : ''}>
-    <div class="cartao">
-      <div class="cartao-titulo"><h2>O que mais influencia o resultado</h2></div>
-      <p class="secundario pequeno">
-        Barras para a direita aumentam ${esc(r.nome)}; para a esquerda, diminuem. A linha fina sobre
-        cada barra é a faixa de incerteza: <strong>quando ela cruza o zero, o efeito pode ser apenas
-        ruído do experimento</strong> e não deve orientar decisões.
-      </p>
-      <div class="grafico-rolagem"><div id="graf-efeitos"></div></div>
-    </div>
-  </section>
+    <div class="coluna">
+      <section class="painel">
+        <div class="painel-cab"><span class="painel-rotulo">${icone('alvo')}Condição recomendada</span></div>
+        <ul class="lista-condicao">
+          ${f.map((x, j) => `<li>
+            <span class="nome">${esc(x.nome)}</span>
+            <span class="valor">${numBR(otimo.recomendado.reais[j], x.casasDecimais ?? 2)}${unidade(x.unidade)}</span>
+          </li>`).join('')}
+        </ul>
+        <p class="secundario pequeno" style="margin:0">Para obter ${esc(objetivo)} de ${esc(r.nome)} dentro da faixa que você testou.</p>
+      </section>
 
-  <section data-painel="qualidade"${estado.abaAnalise !== 'qualidade' ? ' class="oculto"' : ''}>
-    <div class="cartao">
-      <div class="cartao-titulo"><h3>Formato da curva</h3></div>
-      <p class="secundario pequeno">Reanalisa os MESMOS ensaios com outro formato — útil para comparar sem precisar refazer nada.</p>
-      <div class="campo" style="max-width:26rem">
-        <select id="analise-modelo">
+      <section class="painel">
+        <div class="painel-cab">
+          <span class="painel-rotulo">${icone('camadas')}Formato da curva</span>
+        </div>
+        <select id="analise-modelo" aria-label="Formato da curva">
           <option value="quadratico" ${(an.modelo ?? 'quadratico') === 'quadratico' ? 'selected' : ''}>Curvatura simples</option>
           <option value="cubicoReduzido" ${an.modelo === 'cubicoReduzido' ? 'selected' : ''}>Curvatura em S — mesmos ensaios</option>
           <option value="cubicoCompleto" ${an.modelo === 'cubicoCompleto' ? 'selected' : ''}>Curvatura em S completa</option>
         </select>
-      </div>
-      <p class="legenda-grafico">
-        Capacidade de previsão (o que decide entre formatos, não o R²):
-        <strong>${isFinite(ajuste.r2Predito) ? `${numBR(ajuste.r2Predito * 100, 1)}%` : '—'}</strong>
+        <p class="ajuda">Reanalisa os mesmos ensaios com outro formato. Compare pela capacidade de previsão, não pela variação explicada.</p>
+        <div class="metricas">
+          <div class="metrica"><span>Variação explicada</span><strong>${numBR(a.r2 * 100, 1)}%</strong></div>
+          <div class="metrica"><span>Capacidade de previsão</span><strong>${isFinite(ajuste.r2Predito) ? `${numBR(ajuste.r2Predito * 100, 1)}%` : '—'}</strong></div>
+        </div>
         ${isFinite(ajuste.r2Predito) && isFinite(a.r2) && (a.r2 - ajuste.r2Predito) > 0.15
-          ? ' — bem abaixo do R², sinal de que o modelo pode estar decorando os ensaios em vez de descrever a superfície.'
+          ? '<p class="legenda-grafico" style="margin-bottom:0">A previsão está bem abaixo da variação explicada: o modelo pode estar decorando os ensaios em vez de descrever a superfície.</p>'
           : ''}
         ${!isFinite(ajuste.r2Predito) && ajuste.pontosNaoDeletaveis > 0
-          ? ' — não calculável: este modelo tem coeficientes demais para o número de ensaios distintos.'
+          ? '<p class="legenda-grafico" style="margin-bottom:0">Previsão não calculável: este formato tem coeficientes demais para o número de ensaios distintos.</p>'
           : ''}
-      </p>
+      </section>
+
     </div>
-    <div class="grade-2">
-      <div class="cartao">
-        <div class="cartao-titulo"><h3>O modelo acerta seus ensaios?</h3></div>
-        <p class="secundario pequeno">Cada ponto é um ensaio. Quanto mais perto da linha diagonal, melhor o modelo reproduz o que você mediu.</p>
-        <div class="grafico-rolagem"><div id="graf-obsprev"></div></div>
+  </div>
+
+  ${mensagens.length ? `<section class="painel">
+    <div class="painel-cab"><span class="painel-rotulo">${icone('info')}O que os números dizem</span></div>
+    <div class="avisos-grade">${mensagens.join('')}</div>
+  </section>` : ''}
+
+  <section class="painel">
+    <div class="painel-cab">
+      <div>
+        <span class="painel-rotulo">${icone('barras')}O que mais influencia</span>
+        <h2 style="margin-top:.25rem">Efeito de cada variável sobre ${esc(r.nome)}</h2>
       </div>
-      <div class="cartao">
-        <div class="cartao-titulo"><h3>Houve deriva ao longo do dia?</h3></div>
-        <p class="secundario pequeno">Diferenças espalhadas sem padrão são boas. Uma tendência clara sugere que algo mudou durante a execução.</p>
-        <div class="grafico-rolagem"><div id="graf-residuos"></div></div>
+      <div class="painel-extra legenda-marcas">
+        <span><i class="marca-ponto" style="background:var(--diverging-pos);border-radius:3px"></i>Aumenta</span>
+        <span><i class="marca-ponto" style="background:var(--diverging-neg);border-radius:3px"></i>Diminui</span>
       </div>
     </div>
-    <div class="cartao">
-      <div class="cartao-titulo"><h3>Análise de variância</h3></div>
-      ${tabelaAnovaHTML(a)}
-      <p class="legenda-grafico">
-        O modelo explica <strong>${numBR(a.r2 * 100, 1)}%</strong> da variação observada${a.temErroPuro
-          ? `, de um máximo possível de <strong>${numBR(a.r2Maximo * 100, 1)}%</strong> — o restante é o ruído do próprio experimento`
-          : ''}${isFinite(a.r2Ajustado) ? `; ajustado ao número de coeficientes, <strong>${numBR(a.r2Ajustado * 100, 1)}%</strong>` : ''}.
-      </p>
-    </div>
+    <p class="secundario pequeno">A linha fina sobre cada barra é a faixa de incerteza: <strong>quando ela cruza o zero, o efeito pode ser apenas ruído</strong> e não deve orientar decisões.</p>
+    <div class="grafico-rolagem"><div id="graf-efeitos"></div></div>
   </section>
 
-  <section data-painel="ensaios"${estado.abaAnalise !== 'ensaios' ? ' class="oculto"' : ''}>
-    <div class="cartao">
-      <div class="cartao-titulo"><h2>Seus ensaios</h2></div>
+  <div class="dash-2">
+    <section class="painel">
+      <div class="painel-cab">
+        <div>
+          <span class="painel-rotulo">${icone('dispersao')}Confiabilidade</span>
+          <h2 style="margin-top:.25rem">O modelo acerta seus ensaios?</h2>
+        </div>
+      </div>
+      <p class="secundario pequeno">Cada ponto é um ensaio. Quanto mais perto da diagonal, melhor o modelo reproduz o que você mediu.</p>
+      <div class="grafico-rolagem"><div id="graf-obsprev"></div></div>
+    </section>
+    <section class="painel">
+      <div class="painel-cab">
+        <div>
+          <span class="painel-rotulo">${icone('relogio')}Estabilidade</span>
+          <h2 style="margin-top:.25rem">Houve deriva ao longo do dia?</h2>
+        </div>
+      </div>
+      <p class="secundario pequeno">Diferenças espalhadas sem padrão são boas. Uma tendência clara sugere que algo mudou durante a execução.</p>
+      <div class="grafico-rolagem"><div id="graf-residuos"></div></div>
+    </section>
+  </div>
+
+  <section class="painel">
+    <div class="abas" role="tablist">
+      <button class="aba${aba === 'ensaios' ? ' ativa' : ''}" data-aba="ensaios" role="tab">Seus ensaios</button>
+      <button class="aba${aba === 'anova' ? ' ativa' : ''}" data-aba="anova" role="tab">Análise de variância</button>
+      <button class="aba${aba === 'tecnico' ? ' ativa' : ''}" data-aba="tecnico" role="tab">Detalhes técnicos</button>
+    </div>
+
+    <div data-painel="ensaios"${aba !== 'ensaios' ? ' class="oculto"' : ''}>
       <div class="tabela-envolve">
         <table class="dados">
           <thead><tr>
@@ -464,14 +716,20 @@ export function telaAnalise(estado) {
         </table>
       </div>
     </div>
-  </section>
 
-  <section data-painel="tecnico"${estado.abaAnalise !== 'tecnico' ? ' class="oculto"' : ''}>
-    <div class="cartao">
-      <div class="cartao-titulo"><h2>Detalhes técnicos</h2></div>
+    <div data-painel="anova"${aba !== 'anova' ? ' class="oculto"' : ''}>
+      ${tabelaAnovaHTML(a)}
+      <p class="legenda-grafico" style="margin-bottom:0">
+        O modelo explica <strong>${numBR(a.r2 * 100, 1)}%</strong> da variação observada${a.temErroPuro
+          ? `, de um máximo possível de <strong>${numBR(a.r2Maximo * 100, 1)}%</strong> — o restante é o ruído do próprio experimento`
+          : ''}${isFinite(a.r2Ajustado) ? `; ajustado ao número de coeficientes, <strong>${numBR(a.r2Ajustado * 100, 1)}%</strong>` : ''}.
+      </p>
+    </div>
+
+    <div data-painel="tecnico"${aba !== 'tecnico' ? ' class="oculto"' : ''}>
       <p class="secundario pequeno">Esta aba existe para o relatório. Nada aqui é necessário para usar a ferramenta.</p>
 
-      <h3 style="margin-top:1.25rem">Coeficientes do modelo ${{ quadratico: 'quadrático', cubicoReduzido: 'cúbico', cubicoCompleto: 'cúbico completo' }[an.modelo] || 'quadrático'}</h3>
+      <h3 style="margin-top:1rem">Coeficientes do modelo ${{ quadratico: 'quadrático', cubicoReduzido: 'cúbico', cubicoCompleto: 'cúbico completo' }[an.modelo] || 'quadrático'}</h3>
       <p class="secundario pequeno">Em variáveis codificadas, com a região experimental mapeada em [−1, +1].</p>
       <div class="tabela-envolve"><table class="dados">
         <thead><tr><th>Termo</th><th>Significado</th><th>Coeficiente</th><th>Erro padrão</th><th>t</th><th>p</th></tr></thead>
@@ -506,6 +764,7 @@ export function telaAnalise(estado) {
         <thead><tr><th>Item</th><th>Valor</th></tr></thead>
         <tbody>
           <tr><td class="texto">Tipo</td><td class="texto">Composto central (CCD)</td></tr>
+          <tr><td class="texto">Modelo ajustado</td><td class="texto">${esc(NOME_MODELO[an.modelo] || NOME_MODELO.quadratico)}</td></tr>
           <tr><td class="texto">Número de fatores (k)</td><td>${f.length}</td></tr>
           <tr><td class="texto">Distância axial α</td><td>${numBR(meta.config.alpha, 4)}</td></tr>
           <tr><td class="texto">Interpretação dos limites</td><td class="texto">${meta.config.limitMode === 'fatorial' ? 'níveis ±1 (axiais extrapolam)' : 'limites absolutos (nada fora da faixa)'}</td></tr>

@@ -161,21 +161,19 @@ export function gerarPlanilhaEnsaios(meta, ensaios, diagnostico) {
     'Ensaio',
     ...fatores.map(cabecalhoFator),
     cabecalhoResposta(resposta),
-    'Observações',
   ];
   const linhas = emOrdem.map((e) => [
     e.ordemExecucao,
     e.id,
     ...e.reais,
     null, // ← a coluna que o grupo preenche
-    '',
   ]);
 
   const formatos = { 0: '0' };
   fatores.forEach((f, j) => { formatos[2 + j] = formatoNumerico(f.casasDecimais); });
 
   adicionar(wb, ABAS.ENSAIOS, criarAba([cabecalho, ...linhas], {
-    larguras: [8, 10, ...fatores.map(() => 18), 22, 30],
+    larguras: [8, 10, ...fatores.map(() => 18), 22],
     formatos,
   }));
 

@@ -14,7 +14,7 @@ import {
   baixarLivro, nomeArquivo,
 } from './io/excel.js';
 import { baixarLatex } from './io/latex.js';
-import { telaInicio, telaDefinir, telaPlano, telaAnalise, listaErros, caixaAviso } from './ui/views.js';
+import { telaInicio, telaDefinir, telaPlano, telaAnalise, listaErros, caixaAviso, desenhoDistribuicao, cartoesModelo } from './ui/views.js';
 import { plotarSuperficie, plotarEfeitos, plotarObservadoPrevisto, plotarResiduos } from './ui/plot.js';
 
 const CHAVE_RASCUNHO = 'doe:rascunho:v1';
@@ -29,7 +29,7 @@ const estado = {
   erros: [],
   avisos: [],
   avancadoAberto: false,
-  abaAnalise: 'superficie',
+  abaAnalise: 'ensaios',
 };
 
 const app = () => document.getElementById('app');
@@ -51,14 +51,44 @@ function renderizar() {
     case 'definir': alvo.innerHTML = telaDefinir(estado); ligarDefinir(); break;
     case 'plano': alvo.innerHTML = telaPlano(estado); break;
     case 'analise': alvo.innerHTML = telaAnalise(estado); ligarAnalise(); break;
-    default: alvo.innerHTML = telaInicio(); break;
+    default: alvo.innerHTML = telaInicio(lerRascunho()); break;
   }
   atualizarBotaoRascunho();
+  atualizarNavegacao();
+}
+
+/** Marca a tela atual na lateral e só libera as telas que já têm dados. */
+function atualizarNavegacao() {
+  $$('[data-nav]').forEach((b) => {
+    b.classList.toggle('ativo', b.dataset.nav === estado.tela);
+    if (b.dataset.nav === 'plano') b.disabled = !(estado.meta && estado.ensaios);
+    if (b.dataset.nav === 'analise') b.disabled = !estado.analise;
+  });
 }
 
 // ── tela: definir ────────────────────────────────────────────────────────
 
 function ligarDefinir() {
+  // Os desenhos e as contas das opções avançadas dependem do que já está na
+  // tela (nº de variáveis, repetições do centro, distribuição escolhida), então
+  // acompanham a digitação em vez de esperar o "Gerar meus ensaios".
+  const atualizarAvancadas = () => {
+    const nc = $('#cfg-centrais')?.value ?? CONFIG_PADRAO.pontosCentrais;
+    const alvo = $('[data-desenho="ortogonal"]');
+    if (alvo) alvo.innerHTML = desenhoDistribuicao('ortogonal', nc);
+    const cartoes = $('#cartoes-modelo');
+    if (cartoes) {
+      cartoes.innerHTML = cartoesModelo({
+        k: $$('[data-linha-fator]').length,
+        pontosCentrais: nc,
+        tipoAlpha: $('input[name="cfg-alpha"]:checked')?.value || CONFIG_PADRAO.tipoAlpha,
+        modelo: $('input[name="cfg-modelo"]:checked')?.value || CONFIG_PADRAO.modelo,
+      });
+    }
+  };
+  $('#cfg-centrais')?.addEventListener('input', atualizarAvancadas);
+  $$('input[name="cfg-alpha"]').forEach((b) => b.addEventListener('change', atualizarAvancadas));
+
   $('#resp-objetivo')?.addEventListener('change', (e) => {
     $('#campo-alvo')?.classList.toggle('oculto', e.target.value !== 'alvo');
   });
@@ -66,7 +96,7 @@ function ligarDefinir() {
   $('#add-fator')?.addEventListener('click', () => {
     const spec = coletarFormulario();
     if (spec.fatores.length >= 4) {
-      estado.erros = ['A ferramenta trabalha com no máximo 4 condições ao mesmo tempo. Com mais que isso o número de ensaios cresce rápido demais para um laboratório didático.'];
+      estado.erros = ['A ferramenta trabalha com no máximo 4 variáveis ao mesmo tempo. Com mais que isso o número de ensaios cresce rápido demais para um laboratório didático.'];
       estado.spec = spec;
       renderizar();
       return;
@@ -117,8 +147,8 @@ function coletarFormulario() {
     fatores,
     config: {
       pontosCentrais: Number($('#cfg-centrais')?.value || CONFIG_PADRAO.pontosCentrais),
-      tipoAlpha: $('#cfg-alpha')?.value || CONFIG_PADRAO.tipoAlpha,
-      modelo: $('#cfg-modelo')?.value || CONFIG_PADRAO.modelo,
+      tipoAlpha: $('input[name="cfg-alpha"]:checked')?.value || CONFIG_PADRAO.tipoAlpha,
+      modelo: $('input[name="cfg-modelo"]:checked')?.value || CONFIG_PADRAO.modelo,
     },
   };
 }
@@ -126,7 +156,7 @@ function coletarFormulario() {
 function gerarPlanejamento(spec) {
   try {
     const { meta, ensaios, diagnostico } = criarPlanejamento(spec);
-    Object.assign(estado, { meta, ensaios, diagnostico, analise: null, abaAnalise: 'superficie' });
+    Object.assign(estado, { meta, ensaios, diagnostico, analise: null, abaAnalise: 'ensaios' });
     salvarRascunho();
     irPara('plano');
   } catch (e) {
@@ -328,19 +358,20 @@ function retomarRascunho() {
 function aplicarTema(tema) {
   if (tema === 'auto') document.documentElement.removeAttribute('data-theme');
   else document.documentElement.setAttribute('data-theme', tema);
-  localStorage.setItem('doe:tema', tema);
-  const b = $('#alternar-tema');
-  if (b) b.textContent = tema === 'dark' ? '☀' : tema === 'light' ? '☾' : '◐';
+  try { localStorage.setItem('doe:tema', tema); } catch { /* sem armazenamento: vale só nesta visita */ }
+  const rotulo = $('#alternar-tema .nav-texto');
+  if (rotulo) rotulo.textContent = { dark: 'Tema escuro', light: 'Tema claro', auto: 'Tema automático' }[tema];
   if (estado.tela === 'analise') desenharGraficos();
 }
 
 // ── ligação global ───────────────────────────────────────────────────────
 
 document.addEventListener('click', (ev) => {
-  const alvo = ev.target.closest('[data-ir], [data-baixar-modelo], [data-abrir-arquivo], [data-baixar-ensaios], [data-baixar-resultados], [data-baixar-latex]');
+  const alvo = ev.target.closest('[data-ir], [data-retomar], [data-baixar-modelo], [data-abrir-arquivo], [data-baixar-ensaios], [data-baixar-resultados], [data-baixar-latex]');
   if (!alvo) return;
 
   if (alvo.dataset.ir) return irPara(alvo.dataset.ir);
+  if (alvo.hasAttribute('data-retomar')) return retomarRascunho();
   if (alvo.hasAttribute('data-abrir-arquivo')) return pedirArquivo(alvo.dataset.abrirArquivo);
 
   if (alvo.hasAttribute('data-baixar-modelo')) {
@@ -388,17 +419,20 @@ function iniciar() {
   });
 
   $('#alternar-tema')?.addEventListener('click', () => {
-    const atual = localStorage.getItem('doe:tema') || 'auto';
-    aplicarTema({ auto: 'light', light: 'dark', dark: 'auto' }[atual]);
+    let atual = 'dark';
+    try { atual = localStorage.getItem('doe:tema') || 'dark'; } catch { /* segue com o padrão */ }
+    aplicarTema({ dark: 'light', light: 'auto', auto: 'dark' }[atual]);
   });
   $('#retomar')?.addEventListener('click', retomarRascunho);
   $('#recomecar')?.addEventListener('click', () => {
     localStorage.removeItem(CHAVE_RASCUNHO);
-    Object.assign(estado, { spec: null, meta: null, ensaios: null, diagnostico: null, analise: null, abaAnalise: 'superficie' });
+    Object.assign(estado, { spec: null, meta: null, ensaios: null, diagnostico: null, analise: null, abaAnalise: 'ensaios' });
     irPara('inicio');
   });
 
-  aplicarTema(localStorage.getItem('doe:tema') || 'auto');
+  let temaSalvo = 'dark';
+  try { temaSalvo = localStorage.getItem('doe:tema') || 'dark'; } catch { /* segue com o padrão */ }
+  aplicarTema(temaSalvo);
   renderizar();
 }
 
